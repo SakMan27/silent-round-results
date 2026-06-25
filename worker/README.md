@@ -22,7 +22,7 @@ the page for us server-side, and returns it to the app. It only ever fetches
 Open this in your browser (replace with your Worker URL):
 
 ```
-https://silent-round-proxy.<you>.workers.dev/?url=<tabs link>
+https://silent-round-proxy.<you>.workers.dev/?url=<tabs_link>
 ```
 
 You should see the raw HTML of the draw page. If you get a JSON `error`
