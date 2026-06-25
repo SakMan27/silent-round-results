@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Silent Round Result Finder</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <h1>Silent Round Result Finder</h1>
+      <p class="sub">Backtab hidden silent-round results from public Calicotab draws &amp; standings.</p>
+    </header>
+
+    <section class="card">
+      <h2>Load from a tournament link</h2>
+      <p>
+        Paste the tournament's Calicotab link. The app derives the current draw
+        and standings pages and fetches them through your proxy Worker.
+      </p>
+      <label class="field">
+        <span>Tournament link</span>
+        <input type="url" id="tlink" placeholder="https://site.calicotab.com/yourtournament/" />
+      </label>
+      <button id="load">Load &amp; parse</button>
+      <pre id="linkout" class="out" aria-live="polite"></pre>
+    </section>
+
+    <section class="card">
+      <h2>…or load a saved page</h2>
+      <p>Drop in a saved Calicotab <strong>standings</strong> or <strong>draw</strong> page (<code>.html</code>) — handy offline, and the route silent-round draws will use.</p>
+      <input type="file" id="file" accept=".html,.htm" />
+      <pre id="fileout" class="out" aria-live="polite"></pre>
+    </section>
+
+    <footer><p>Static site · no build step · scaffold stage (parser + fetch done; solver next)</p></footer>
+  </main>
+
+  <script type="module">
+    import { parseStandings, parseDraw, extractTablesData } from "./js/parse.js";
+    import { loadTournament, derivedUrls } from "./js/sources.js";
+
+    const $ = (id) => document.getElementById(id);
+
+    // --- Link path ---
+    $("load").addEventListener("click", async () => {
+      const link = $("tlink").value.trim();
+      const out = $("linkout");
+      if (!link) { out.textContent = "Paste a tournament link first."; return; }
+      try {
+        out.textContent = "Deriving URLs…\n" + JSON.stringify(derivedUrls(link), null, 2);
+        out.textContent += "\n\nFetching…";
+        const { standings, draw } = await loadTournament(link);
+        const nTeams = Object.keys(standings.teams).length;
+        const drawn = draw.rooms.reduce((a, r) => a + r.teams.length, 0);
+        out.textContent =
+          `✓ Standings: ${nTeams} teams (rounds R${standings.roundsShown.join(", R")})\n` +
+          `✓ Draw: round ${draw.round ?? "?"} · ${draw.rooms.length} rooms · ${drawn} teams\n\n` +
+          `Sample room: ` + JSON.stringify(draw.rooms[0].teams.map(t => `${t.pos}:${t.name}`), null, 0);
+      } catch (e) {
+        out.textContent = "✗ " + e.message;
+      }
+    });
+
+    // --- File path ---
+    $("file").addEventListener("change", async (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      const out = $("fileout");
+      out.textContent = "Parsing " + file.name + " …";
+      try {
+        const html = await file.text();
+        const headers = (extractTablesData(html)[0]?.head || []).map(h => h.title || h.tooltip || h.key);
+        if (headers.some(h => /point/i.test(String(h)))) {
+          const r = parseStandings(html);
+          out.textContent = `✓ Standings · ${Object.keys(r.teams).length} teams · rounds R${r.roundsShown.join(", R")}`;
+        } else {
+          const r = parseDraw(html);
+          const t = r.rooms.reduce((a, rm) => a + rm.teams.length, 0);
+          out.textContent = `✓ Draw · round ${r.round ?? "?"} · ${r.rooms.length} rooms · ${t} teams`;
+        }
+      } catch (err) { out.textContent = "✗ " + err.message; }
+    });
+  </script>
+</body>
+</html>
