@@ -39,4 +39,4 @@ One honest limit: the **very last silent round can't be worked out**, because th
 ## Good to know
 
 - Works only for tournaments run on **Calicotab / Tabbycat**.
-- If you're at the very top or bottom of the standings, your results are usually obvious anyway (you're clearly breaking, or clearly not), so the tool is most useful for everyone in between.
+- If you're at the very top or bottom of the standings, power-pairing becomes less accurate, but your results are usually obvious anyway (you're clearly breaking, or clearly not), so the tool is most effective and useful for everyone in between.
