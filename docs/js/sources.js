@@ -109,12 +109,17 @@ export async function loadTournament(pastedUrl, workerUrl = WORKER_URL) {
   catch { throw new Error("The standings page loaded, but public standings don't seem to be available for this tournament."); }
 
   try { draw = parseDraw(drawRes.value); }
-  catch { draw = { kind: "draw", round: null, rooms: [] }; }
+  catch { draw = { kind: "draw", round: null, rooms: [], meta: { bpColumns: 0, dataRows: 0 } }; }
+
   if (!draw.rooms.length) {
+    const meta = draw.meta || { bpColumns: 0, dataRows: 0 };
+    // Table had rooms but none in OG/OO/CG/CO format -> not BP (e.g. WSDC).
+    if (meta.dataRows > 0 && meta.bpColumns < 4) {
+      throw new Error("This looks like a non-BP tournament (the draw isn't in OG/OO/CG/CO format) — this tool only supports British Parliamentary.");
+    }
     throw new Error("The current draw isn't released yet — the page is up, but it has no pairings to read.");
   }
-  // This tool is British Parliamentary only: every BP room has 4 teams. WSDC and
-  // other 2-team formats won't, so flag that clearly instead of crashing later.
+  // Safety net: BP rooms must have 4 teams.
   if (!draw.rooms.every((r) => r.teams.length === 4)) {
     throw new Error("This looks like a non-BP tournament (rooms don't have 4 teams) — this tool only supports British Parliamentary.");
   }
