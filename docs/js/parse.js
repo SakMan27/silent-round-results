@@ -179,38 +179,41 @@ export function parseDraw(html, roundHint = null) {
   const tables = extractTablesData(html);
   const t = tables[0];
   const head = t.head.map((h) => h.title || h.key);
-
-  // Map header columns to BP positions by their label.
-  const posIdx = {};
-  head.forEach((label, idx) => {
-    if (POS.includes(label)) posIdx[label] = idx;
-  });
-  const bpColumns = Object.keys(posIdx).length;     // 4 for a BP draw, 0 for WSDC
   const dataRows = Array.isArray(t.data) ? t.data.length : 0;
 
+  // Identify teams structurally, by the `team-name` class — NOT by header words.
+  // This is format- and language-agnostic, and ignores venue/adjudicator/other
+  // columns automatically. BP rooms have 4 team cells; two-team formats have 2.
   const rooms = [];
+  const perRoomCounts = {};
   for (const row of t.data) {
     const venueCell = row.find((c) => c && c.class === "venue-name");
-    const room = {
-      venue: venueCell ? (venueCell.text || "").trim() : null,
-      teams: [],
-    };
-    for (const pos of POS) {
-      const idx = posIdx[pos];
-      if (idx == null) continue;
-      const cell = row[idx];
-      if (!isTeamCell(cell)) continue;
+    const teamCells = [];
+    row.forEach((cell, idx) => { if (isTeamCell(cell)) teamCells.push({ cell, idx }); });
+    perRoomCounts[teamCells.length] = (perRoomCounts[teamCells.length] || 0) + 1;
+
+    const room = { venue: venueCell ? (venueCell.text || "").trim() : null, teams: [] };
+    teamCells.forEach(({ cell, idx }, k) => {
       const ident = teamIdentity(cell);
-      if (ident.id) room.teams.push({ ...ident, pos });
-    }
+      if (!ident.id) return;
+      // Use the BP position label from the header when present, else cell order.
+      const label = head[idx];
+      const pos = POS.includes(label) ? label : (POS[k] || `P${k + 1}`);
+      room.teams.push({ ...ident, pos });
+    });
     if (room.teams.length) rooms.push(room);
   }
+
+  // teamsPerRoom = the most common team-cell count across rooms (robust to byes).
+  const teamsPerRoom = Object.keys(perRoomCounts)
+    .map(Number)
+    .sort((a, b) => perRoomCounts[b] - perRoomCounts[a])[0] || 0;
 
   return {
     kind: "draw",
     round: roundHint ?? detectRoundFromHtml(html),
     rooms,
-    meta: { bpColumns, dataRows, headers: head },
+    meta: { teamsPerRoom, dataRows, headers: head },
   };
 }
 
