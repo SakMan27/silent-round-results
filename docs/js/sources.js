@@ -20,7 +20,7 @@ const PATHS = {
 // Known Tabbycat page segments that appear *after* the tournament base. If the
 // pasted link already points into one of these, we cut back to the base before
 // it — so we never blindly append to a URL that's already a page within the
-// tournament (e.g. ".../tournament/tab/current-standings/").
+// tournament (e.g. ".../srbp2024/tab/current-standings/").
 const PAGE_SEGMENTS = new Set([
   "draw", "tab", "standings", "participants", "results", "break", "motions",
   "feedback", "availability", "round", "info-slide", "admin", "assistant",
@@ -28,10 +28,10 @@ const PAGE_SEGMENTS = new Set([
 ]);
 
 // From any page URL within a tournament, recover the tournament base.
-//   .../tournament/                        -> .../tournament/
-//   .../tournament/draw/                   -> .../tournament/
-//   .../tournament/tab/current-standings/  -> .../tournament/   (multi-segment page)
-//   example.com/tabbycat/tournament/draw/  -> example.com/tabbycat/tournament/ (path-mounted)
+//   .../srbp2024/                        -> .../srbp2024/
+//   .../srbp2024/draw/                   -> .../srbp2024/
+//   .../srbp2024/tab/current-standings/  -> .../srbp2024/   (multi-segment page)
+//   example.com/tabbycat/srbp2024/draw/  -> example.com/tabbycat/srbp2024/ (path-mounted)
 export function tournamentBase(pastedUrl) {
   let u;
   try { u = new URL(pastedUrl.trim()); }
@@ -109,14 +109,14 @@ export async function loadTournament(pastedUrl, workerUrl = WORKER_URL) {
   catch { throw new Error("The standings page loaded, but public standings don't seem to be available for this tournament."); }
 
   try { draw = parseDraw(drawRes.value); }
-  catch { draw = { kind: "draw", round: null, rooms: [], meta: { bpColumns: 0, dataRows: 0 } }; }
+  catch { draw = { kind: "draw", round: null, rooms: [], meta: { teamsPerRoom: 0, dataRows: 0 } }; }
 
+  const meta = draw.meta || { teamsPerRoom: 0, dataRows: 0 };
+  // A two-team (or other non-4) format, e.g. WSDC: rooms exist but not with 4 teams.
+  if (meta.dataRows > 0 && meta.teamsPerRoom && meta.teamsPerRoom !== 4) {
+    throw new Error(`This looks like a non-BP tournament (${meta.teamsPerRoom} teams per room) — this tool only supports British Parliamentary.`);
+  }
   if (!draw.rooms.length) {
-    const meta = draw.meta || { bpColumns: 0, dataRows: 0 };
-    // Table had rooms but none in OG/OO/CG/CO format -> not BP (e.g. WSDC).
-    if (meta.dataRows > 0 && meta.bpColumns < 4) {
-      throw new Error("This looks like a non-BP tournament (the draw isn't in OG/OO/CG/CO format) — this tool only supports British Parliamentary.");
-    }
     throw new Error("The current draw isn't released yet — the page is up, but it has no pairings to read.");
   }
   // Safety net: BP rooms must have 4 teams.
