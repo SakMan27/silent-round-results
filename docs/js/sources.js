@@ -20,7 +20,7 @@ const PATHS = {
 // Known Tabbycat page segments that appear *after* the tournament base. If the
 // pasted link already points into one of these, we cut back to the base before
 // it — so we never blindly append to a URL that's already a page within the
-// tournament (e.g. ".../tournament/tab/current-standings/").
+// tournament (e.g. ".../srbp2024/tab/current-standings/").
 const PAGE_SEGMENTS = new Set([
   "draw", "tab", "standings", "participants", "results", "break", "motions",
   "feedback", "availability", "round", "info-slide", "admin", "assistant",
@@ -28,10 +28,10 @@ const PAGE_SEGMENTS = new Set([
 ]);
 
 // From any page URL within a tournament, recover the tournament base.
-//   .../tournament/                        -> .../tournament/
-//   .../tournament/draw/                   -> .../tournament/
-//   .../tournament/tab/current-standings/  -> .../tournament/   (multi-segment page)
-//   example.com/tabbycat/tournament/draw/  -> example.com/tabbycat/tournament/ (path-mounted)
+//   .../srbp2024/                        -> .../srbp2024/
+//   .../srbp2024/draw/                   -> .../srbp2024/
+//   .../srbp2024/tab/current-standings/  -> .../srbp2024/   (multi-segment page)
+//   example.com/tabbycat/srbp2024/draw/  -> example.com/tabbycat/srbp2024/ (path-mounted)
 export function tournamentBase(pastedUrl) {
   let u;
   try { u = new URL(pastedUrl.trim()); }
@@ -72,19 +72,52 @@ export async function fetchViaWorker(workerUrl, targetUrl) {
   return await res.text();
 }
 
+// Diagnostic: fetch + parse ONLY the standings from a link. Standings exist
+// even when no draw is live, so this confirms the link→fetch→parse path works
+// on real data without needing a mid-competition tournament.
+export async function loadStandingsOnly(pastedUrl, workerUrl = WORKER_URL) {
+  const urls = derivedUrls(pastedUrl);
+  const html = await fetchViaWorker(workerUrl, urls.standings);
+  return { url: urls.standings, standings: parseStandings(html) };
+}
+
 // Load the two required pages from a pasted link and parse them.
 export async function loadTournament(pastedUrl, workerUrl = WORKER_URL) {
   if (!workerUrl) throw new Error("No proxy configured yet — set WORKER_URL in config.js, or upload the pages instead.");
   const urls = derivedUrls(pastedUrl);
 
-  const [standingsHtml, drawHtml] = await Promise.all([
+  // Fetch independently so we can say exactly which page is missing, and so a
+  // missing draw doesn't hide a perfectly good standings page.
+  const [standingsRes, drawRes] = await Promise.allSettled([
     fetchViaWorker(workerUrl, urls.standings),
     fetchViaWorker(workerUrl, urls.draw),
   ]);
 
-  return {
-    urls,
-    standings: parseStandings(standingsHtml),
-    draw: parseDraw(drawHtml),
-  };
+  if (standingsRes.status === "rejected") {
+    throw new Error("Couldn't load the standings page (" + standingsRes.reason.message +
+      "). Check the tournament link, or that public standings are enabled.");
+  }
+  if (drawRes.status === "rejected") {
+    throw new Error("Couldn't load the current draw (" + drawRes.reason.message +
+      "). This tournament may not have a draw released right now.");
+  }
+
+  // Pages can load (HTTP 200) but contain no table — e.g. a "draw not released"
+  // placeholder, or standings that aren't public. Detect that and say so.
+  let standings, draw;
+  try { standings = parseStandings(standingsRes.value); }
+  catch { throw new Error("The standings page loaded, but public standings don't seem to be available for this tournament."); }
+
+  try { draw = parseDraw(drawRes.value); }
+  catch { draw = { kind: "draw", round: null, rooms: [] }; }
+  if (!draw.rooms.length) {
+    throw new Error("The current draw isn't released yet — the page is up, but it has no pairings to read.");
+  }
+  // This tool is British Parliamentary only: every BP room has 4 teams. WSDC and
+  // other 2-team formats won't, so flag that clearly instead of crashing later.
+  if (!draw.rooms.every((r) => r.teams.length === 4)) {
+    throw new Error("This looks like a non-BP tournament (rooms don't have 4 teams) — this tool only supports British Parliamentary.");
+  }
+
+  return { urls, standings, draw };
 }
