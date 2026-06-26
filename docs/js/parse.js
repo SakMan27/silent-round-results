@@ -19,7 +19,12 @@ const POS = ["OG", "OO", "CG", "CO"]; // BP positions, in draw-column order
 // ---------------------------------------------------------------------------
 
 export function extractTablesData(html) {
-  const anchor = html.indexOf("tablesData");
+  // Tabbycat puts a Vue *placeholder* in the markup first ( :tables-data="tablesData" ),
+  // then the real payload in a script:  window.vueData = { tablesData: [ ... ] }.
+  // Anchor on the assignment so we never grab the placeholder by mistake.
+  let anchor = html.indexOf("vueData");
+  if (anchor !== -1) anchor = html.indexOf("tablesData", anchor);
+  if (anchor === -1) anchor = html.indexOf("tablesData"); // fallback: any occurrence
   if (anchor === -1) {
     throw new ParseError(
       "No tablesData found. Is this a Calicotab/Tabbycat page (draw, standings, or participants)?"
