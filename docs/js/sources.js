@@ -20,7 +20,7 @@ const PATHS = {
 // Known Tabbycat page segments that appear *after* the tournament base. If the
 // pasted link already points into one of these, we cut back to the base before
 // it — so we never blindly append to a URL that's already a page within the
-// tournament (e.g. ".../srbp2024/tab/current-standings/").
+// tournament (e.g. ".../tournament/tab/current-standings/").
 const PAGE_SEGMENTS = new Set([
   "draw", "tab", "standings", "participants", "results", "break", "motions",
   "feedback", "availability", "round", "info-slide", "admin", "assistant",
@@ -28,10 +28,10 @@ const PAGE_SEGMENTS = new Set([
 ]);
 
 // From any page URL within a tournament, recover the tournament base.
-//   .../srbp2024/                        -> .../srbp2024/
-//   .../srbp2024/draw/                   -> .../srbp2024/
-//   .../srbp2024/tab/current-standings/  -> .../srbp2024/   (multi-segment page)
-//   example.com/tabbycat/srbp2024/draw/  -> example.com/tabbycat/srbp2024/ (path-mounted)
+//   .../tournament/                        -> .../tournament/
+//   .../tournament/draw/                   -> .../tournament/
+//   .../tournament/tab/current-standings/  -> .../tournament/   (multi-segment page)
+//   example.com/tabbycat/tournament/draw/  -> example.com/tabbycat/tournament/ (path-mounted)
 export function tournamentBase(pastedUrl) {
   let u;
   try { u = new URL(pastedUrl.trim()); }
