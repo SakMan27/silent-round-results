@@ -180,6 +180,8 @@ export function parseDraw(html, roundHint = null) {
   head.forEach((label, idx) => {
     if (POS.includes(label)) posIdx[label] = idx;
   });
+  const bpColumns = Object.keys(posIdx).length;     // 4 for a BP draw, 0 for WSDC
+  const dataRows = Array.isArray(t.data) ? t.data.length : 0;
 
   const rooms = [];
   for (const row of t.data) {
@@ -199,7 +201,12 @@ export function parseDraw(html, roundHint = null) {
     if (room.teams.length) rooms.push(room);
   }
 
-  return { kind: "draw", round: roundHint ?? detectRoundFromHtml(html), rooms };
+  return {
+    kind: "draw",
+    round: roundHint ?? detectRoundFromHtml(html),
+    rooms,
+    meta: { bpColumns, dataRows, headers: head },
+  };
 }
 
 function detectRoundFromHtml(html) {
