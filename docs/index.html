@@ -24,6 +24,7 @@
         <input type="url" id="tlink" placeholder="https://site.calicotab.com/yourtournament/" />
       </label>
       <button id="load">Load &amp; parse</button>
+      <button id="checkStandings" style="margin-left:8px;background:#2a2f3a;color:var(--ink)">Test standings only (via link)</button>
       <pre id="linkout" class="out" aria-live="polite"></pre>
     </section>
 
@@ -38,8 +39,7 @@
   </main>
 
   <script type="module">
-    import { parseStandings, parseDraw, extractTablesData } from "./js/parse.js";
-    import { loadTournament, derivedUrls } from "./js/sources.js";
+    import { loadTournament, derivedUrls, loadFromHtml } from "./js/sources.js";
 
     const $ = (id) => document.getElementById(id);
 
@@ -63,21 +63,18 @@
       }
     });
 
-    // --- File path ---
+    // --- File path (same parsing + BP checks as the link path) ---
     $("file").addEventListener("change", async (e) => {
       const file = e.target.files[0]; if (!file) return;
       const out = $("fileout");
       out.textContent = "Parsing " + file.name + " …";
       try {
-        const html = await file.text();
-        const headers = (extractTablesData(html)[0]?.head || []).map(h => h.title || h.tooltip || h.key);
-        if (headers.some(h => /point/i.test(String(h)))) {
-          const r = parseStandings(html);
-          out.textContent = `✓ Standings · ${Object.keys(r.teams).length} teams · rounds R${r.roundsShown.join(", R")}`;
+        const r = loadFromHtml(await file.text());
+        if (r.kind === "standings") {
+          out.textContent = `✓ Standings · ${Object.keys(r.standings.teams).length} teams · rounds R${r.standings.roundsShown.join(", R")}`;
         } else {
-          const r = parseDraw(html);
-          const t = r.rooms.reduce((a, rm) => a + rm.teams.length, 0);
-          out.textContent = `✓ Draw · round ${r.round ?? "?"} · ${r.rooms.length} rooms · ${t} teams`;
+          const t = r.draw.rooms.reduce((a, rm) => a + rm.teams.length, 0);
+          out.textContent = `✓ Draw · round ${r.draw.round ?? "?"} · ${r.draw.rooms.length} rooms · ${t} teams`;
         }
       } catch (err) { out.textContent = "✗ " + err.message; }
     });
