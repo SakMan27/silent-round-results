@@ -5,7 +5,7 @@
 // whatever tournament link the user pastes, fetch them through the proxy
 // Worker (CORS), and run the HTML through the parser we already have.
 
-import { parseStandings, parseDraw } from "./parse.js";
+import { parseStandings, parseDraw, extractTablesData } from "./parse.js";
 import { WORKER_URL } from "./config.js";
 
 // Fixed public paths, relative to the tournament base ".../<slug>/".
@@ -111,18 +111,55 @@ export async function loadTournament(pastedUrl, workerUrl = WORKER_URL) {
   try { draw = parseDraw(drawRes.value); }
   catch { draw = { kind: "draw", round: null, rooms: [], meta: { teamsPerRoom: 0, dataRows: 0 } }; }
 
-  const meta = draw.meta || { teamsPerRoom: 0, dataRows: 0 };
-  // A two-team (or other non-4) format, e.g. WSDC: rooms exist but not with 4 teams.
-  if (meta.dataRows > 0 && meta.teamsPerRoom && meta.teamsPerRoom !== 4) {
-    throw new Error(`This looks like a non-BP tournament (${meta.teamsPerRoom} teams per room) — this tool only supports British Parliamentary.`);
-  }
+  const nb = nonBpDrawMessage(draw);
+  if (nb) throw new Error(nb);
   if (!draw.rooms.length) {
     throw new Error("The current draw isn't released yet — the page is up, but it has no pairings to read.");
   }
-  // Safety net: BP rooms must have 4 teams.
-  if (!draw.rooms.every((r) => r.teams.length === 4)) {
-    throw new Error("This looks like a non-BP tournament (rooms don't have 4 teams) — this tool only supports British Parliamentary.");
-  }
 
   return { urls, standings, draw };
+}
+
+// Shared format check: returns a message if a parsed draw isn't a usable BP draw
+// (two-team formats like WSDC, or malformed rooms), else null. Detection is by
+// team-cell count, so it's independent of header wording, language, and any
+// extra columns (venue, adjudicators, …).
+export function nonBpDrawMessage(draw) {
+  const meta = draw.meta || { teamsPerRoom: 0, dataRows: 0 };
+  if (meta.dataRows > 0 && meta.teamsPerRoom && meta.teamsPerRoom !== 4) {
+    return `This looks like a non-BP tournament (${meta.teamsPerRoom} teams per room) — this tool only supports British Parliamentary.`;
+  }
+  if (draw.rooms.length && !draw.rooms.every((r) => r.teams.length === 4)) {
+    return "This looks like a non-BP tournament (rooms don't have 4 teams) — this tool only supports British Parliamentary.";
+  }
+  return null;
+}
+
+// Upload path: classify a saved page as standings or draw (by how many team
+// cells each row has — draws have ≥2 per room, standings have 1), parse it, and
+// apply the same BP checks as the link path.
+export function loadFromHtml(html) {
+  let tables;
+  try { tables = extractTablesData(html); }
+  catch { throw new Error("Couldn't read this file — is it a saved Calicotab/Tabbycat draw or standings page?"); }
+
+  const rows = (tables[0] && tables[0].data) || [];
+  const teamCellsPerRow = rows.map((row) =>
+    row.filter((c) => c && typeof c.class === "string" && c.class.includes("team-name")).length
+  );
+  const maxTeams = teamCellsPerRow.length ? Math.max(...teamCellsPerRow) : 0;
+
+  if (maxTeams >= 2) {
+    const draw = parseDraw(html);
+    const nb = nonBpDrawMessage(draw);
+    if (nb) throw new Error(nb);
+    if (!draw.rooms.length) throw new Error("This draw page has no pairings to read.");
+    return { kind: "draw", draw };
+  }
+
+  const standings = parseStandings(html);
+  if (!Object.keys(standings.teams).length) {
+    throw new Error("No teams found — is this a standings page?");
+  }
+  return { kind: "standings", standings };
 }
