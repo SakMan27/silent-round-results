@@ -230,3 +230,23 @@ export class ParseError extends Error {
 }
 
 export const _internals = { teamIdFromCell, parseRoundResultCell, POS };
+
+// ---------------------------------------------------------------------------
+// Public: parse a PARTICIPANTS list page into {id, name} pairs. Used to populate
+// the correction dropdowns when reviewing uploaded/OCR'd draws.
+// ---------------------------------------------------------------------------
+
+export function parseParticipants(html) {
+  const tables = extractTablesData(html);
+  const teams = {};
+  for (const t of tables) {
+    for (const row of (t.data || [])) {
+      for (const cell of row) {
+        if (!isTeamCell(cell)) continue;
+        const ident = teamIdentity(cell);
+        if (ident.id) teams[ident.id] = { id: ident.id, name: ident.name, emoji: ident.emoji };
+      }
+    }
+  }
+  return { kind: "participants", teams };
+}
