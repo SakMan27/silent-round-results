@@ -1,83 +1,423 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Silent Round Result Finder</title>
-  <link rel="stylesheet" href="css/style.css" />
+  <title>Silent Round — recover BP silent-round results</title>
+  <link rel="stylesheet" href="./css/style.css" />
 </head>
 <body>
-  <main class="wrap">
-    <header>
-      <h1>Silent Round Result Finder</h1>
-      <p class="sub">Backtab hidden silent-round results from public Calicotab draws &amp; standings.</p>
+  <div class="wrap">
+    <header class="masthead">
+      <div class="chamber" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      <div class="wordmark">
+        <b>Silent&nbsp;Round</b>
+        <small>Back-solve hidden BP results from the draw</small>
+      </div>
     </header>
 
-    <section class="card">
-      <h2>Load from a tournament link</h2>
-      <p>
-        Paste the tournament's Calicotab link. The app derives the current draw
-        and standings pages and fetches them through your proxy Worker.
-      </p>
-      <label class="field">
-        <span>Tournament link</span>
-        <input type="url" id="tlink" placeholder="https://site.calicotab.com/yourtournament/" />
-      </label>
-      <button id="load">Load &amp; parse</button>
-      <button id="checkStandings" style="margin-left:8px;background:#2a2f3a;color:var(--ink)">Test standings only (via link)</button>
-      <pre id="linkout" class="out" aria-live="polite"></pre>
+    <nav class="stepper" aria-label="Progress">
+      <div class="st active" data-step="source"><span class="n"><span class="num">1</span></span><span class="label">Source</span></div>
+      <div class="st" data-step="review"><span class="n"><span class="num">2</span></span><span class="label">Review</span></div>
+      <div class="st" data-step="silent"><span class="n"><span class="num">3</span></span><span class="label">Silent draw</span></div>
+      <div class="st" data-step="ready"><span class="n"><span class="num">4</span></span><span class="label">Predict</span></div>
+    </nav>
+
+    <!-- ============ STEP 1: SOURCE ============ -->
+    <section class="screen show" id="s-source">
+      <div class="lead">
+        <h1>Where should the <em>standings &amp; draw</em> come from?</h1>
+        <p>Silent Round reads the current standings and draw, then infers each team's hidden silent-round placement. Start with a live tournament link, or upload the pages yourself.</p>
+      </div>
+      <div class="choices">
+        <button class="choice" id="pick-link">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7L12 19"/></svg>
+          <h3>Tournament link</h3>
+          <p>Paste a Calicotab / Tabbycat link. We fetch and read the pages for you.</p>
+          <span class="tag">Fastest</span>
+        </button>
+        <button class="choice" id="pick-upload">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/></svg>
+          <h3>Upload pages</h3>
+          <p>No public link? Upload the standings and draw as a saved page or a screenshot.</p>
+          <span class="tag">Works offline</span>
+        </button>
+      </div>
     </section>
 
-    <section class="card">
-      <h2>…or load a saved page</h2>
-      <p>Drop in a saved Calicotab <strong>standings</strong> or <strong>draw</strong> page (<code>.html</code>) — handy offline, and the route silent-round draws will use.</p>
-      <input type="file" id="file" accept=".html,.htm" />
-      <pre id="fileout" class="out" aria-live="polite"></pre>
+    <!-- ============ STEP 1a: LINK ============ -->
+    <section class="screen" id="s-link">
+      <div class="lead"><h1>Paste the tournament link</h1>
+        <p>Any page of the tournament works — we find the standings and current draw from it.</p></div>
+      <div class="card">
+        <label class="field">
+          <span class="lab">Tournament link</span>
+          <input type="url" id="link-input" placeholder="https://yourtournament.calicotab.com/…" autocomplete="off" />
+        </label>
+        <div class="row between">
+          <button class="btn link" data-back="source">← Back</button>
+          <button class="btn primary" id="link-go">Fetch &amp; read</button>
+        </div>
+        <div class="status" id="link-status"></div>
+      </div>
     </section>
 
-    <footer><p>Static site · no build step · scaffold stage (parser + fetch done; solver next)</p></footer>
-  </main>
+    <!-- ============ STEP 1b: UPLOAD ============ -->
+    <section class="screen" id="s-upload">
+      <div class="lead"><h1>Upload the pages</h1>
+        <p>Standings are required. The current draw is optional here — if it isn't out yet, you can skip it. Saved <b>.html</b> reads exactly; a <b>screenshot</b> is read by OCR and you'll confirm it next.</p></div>
+      <div class="card">
+        <div class="subdrop">
+          <div>
+            <label class="drop" id="drop-standings">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+              <b>Standings</b>
+              <small>required · .html or image</small>
+              <input type="file" id="file-standings" accept=".html,.htm,image/*" />
+            </label>
+          </div>
+          <div>
+            <label class="drop" id="drop-draw">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg>
+              <b>Current draw</b>
+              <small>optional · .html or image</small>
+              <input type="file" id="file-draw" accept=".html,.htm,image/*" />
+            </label>
+          </div>
+        </div>
+        <div class="row between" style="margin-top:18px">
+          <button class="btn link" data-back="source">← Back</button>
+          <button class="btn primary" id="upload-go" disabled>Read &amp; review</button>
+        </div>
+        <div class="status" id="upload-status"></div>
+      </div>
+    </section>
+
+    <!-- ============ STEP 2: REVIEW ============ -->
+    <section class="screen" id="s-review">
+      <div class="lead"><h1>Check the draw we read</h1>
+        <p>Fix anything the reader got wrong — every seat is a dropdown of known teams. This matters most for screenshots.</p></div>
+      <div class="card">
+        <div class="stats" id="review-stats"></div>
+        <div class="rooms" id="review-rooms"></div>
+        <div class="row between" style="margin-top:18px">
+          <button class="btn link" id="review-back">← Back</button>
+          <button class="btn primary" id="review-go">Looks right →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ STEP 3: SILENT DRAW ============ -->
+    <section class="screen" id="s-silent">
+      <div class="lead"><h1>Add the <em>silent-round</em> draw</h1>
+        <p>Strongly recommended. The draw released for the silent round pins each room to exactly one 1st / 2nd / 3rd / 4th — it's what sharpens the prediction from a guess to a cross-checked result. Upload it as a saved page or screenshot. A results page works too — we use only the room line-ups.</p></div>
+      <div class="card">
+        <label class="drop" id="drop-silent">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16M15 4v16"/></svg>
+          <b>Silent-round draw or results</b>
+          <small>.html or image</small>
+          <input type="file" id="file-silent" accept=".html,.htm,image/*" />
+        </label>
+        <div class="status" id="silent-status"></div>
+        <div class="row between" style="margin-top:18px">
+          <button class="btn link" id="silent-back">← Back</button>
+          <div class="row">
+            <button class="btn ghost" id="silent-skip">Skip for now</button>
+            <button class="btn primary" id="silent-go" disabled>Continue →</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ STEP 4: READY ============ -->
+    <section class="screen" id="s-ready">
+      <div class="lead"><h1>Everything's in place</h1>
+        <p>Here's what Silent Round will reason over. The prediction step turns this into a per-team distribution.</p></div>
+      <div class="card">
+        <div class="stats" id="ready-stats"></div>
+        <div id="ready-detail"></div>
+        <div class="note" id="ready-note"></div>
+        <div class="row between" style="margin-top:18px">
+          <button class="btn link" data-back="silent">← Back</button>
+          <button class="btn primary" id="ready-go">Generate predictions →</button>
+        </div>
+        <div class="status" id="ready-status"></div>
+      </div>
+    </section>
+
+    <p class="foot">Silent Round · reads Calicotab / Tabbycat · British Parliamentary only</p>
+  </div>
 
   <script type="module">
-    import { loadTournament, derivedUrls, loadFromHtml } from "./js/sources.js";
+    import { loadTournament, loadFromHtml, loadParticipants, teamList, derivedUrls } from "./js/sources.js";
+    import { parseDraw, parseStandings, parseParticipants } from "./js/parse.js";
 
-    const $ = (id) => document.getElementById(id);
+    const $ = (s) => document.querySelector(s);
+    const $$ = (s) => Array.from(document.querySelectorAll(s));
 
-    // --- Link path ---
-    $("load").addEventListener("click", async () => {
-      const link = $("tlink").value.trim();
-      const out = $("linkout");
-      if (!link) { out.textContent = "Paste a tournament link first."; return; }
-      try {
-        out.textContent = "Deriving URLs…\n" + JSON.stringify(derivedUrls(link), null, 2);
-        out.textContent += "\n\nFetching…";
-        const { standings, draw } = await loadTournament(link);
-        const nTeams = Object.keys(standings.teams).length;
-        const drawn = draw.rooms.reduce((a, r) => a + r.teams.length, 0);
-        out.textContent =
-          `✓ Standings: ${nTeams} teams (rounds R${standings.roundsShown.join(", R")})\n` +
-          `✓ Draw: round ${draw.round ?? "?"} · ${draw.rooms.length} rooms · ${drawn} teams\n\n` +
-          `Sample room: ` + JSON.stringify(draw.rooms[0].teams.map(t => `${t.pos}:${t.name}`), null, 0);
-      } catch (e) {
-        out.textContent = "✗ " + e.message;
+    // ---- app state ----
+    const app = {
+      method: null,            // 'link' | 'upload'
+      base: null,
+      participants: [],        // [{id,name}]
+      standings: null,         // parseStandings result
+      currentDraw: null,       // parseDraw result (rooms)
+      silentDraw: null,        // parseDraw result (rooms)
+      reviewing: null,         // which draw is on the review screen: 'current' | 'silent'
+    };
+
+    const STEPS = ["source", "review", "silent", "ready"];
+    function show(id) {
+      $$(".screen").forEach((s) => s.classList.remove("show"));
+      $("#s-" + id).classList.add("show");
+      // map sub-screens to stepper groups
+      const group = { source:"source", link:"source", upload:"source", review:"review", silent:"silent", ready:"ready" }[id];
+      const idx = STEPS.indexOf(group);
+      $$(".stepper .st").forEach((st, i) => {
+        st.classList.toggle("active", i === idx);
+        st.classList.toggle("done", i < idx);
+      });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    function setStatus(el, msg, kind) {
+      el.className = "status " + (kind || "");
+      el.innerHTML = msg ? `<span class="dot"></span>${msg}` : "";
+    }
+
+    // ---- OCR (lazy) ----
+    let _tess = null, _tessLoading = null;
+    function loadTesseract() {
+      if (window.Tesseract) return Promise.resolve(window.Tesseract);
+      if (_tessLoading) return _tessLoading;
+      _tessLoading = new Promise((res, rej) => {
+        const s = document.createElement("script");
+        s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+        s.onload = () => res(window.Tesseract);
+        s.onerror = () => rej(new Error("Couldn't load the screenshot reader. Check your connection, or upload a saved .html page instead."));
+        document.head.appendChild(s);
+      });
+      return _tessLoading;
+    }
+    async function ocr(file, onProgress) {
+      if (!_tess) _tess = await loadTesseract();
+      const { data } = await _tess.recognize(file, "eng", onProgress ? { logger: onProgress } : {});
+      return data.text || "";
+    }
+    const isImage = (f) => f && /^image\//.test(f.type);
+
+    // ---- fuzzy match OCR text → participants (assist only; user confirms) ----
+    const norm = (s) => (s||"").toLowerCase().replace(/[^a-z0-9 ]/g," ").replace(/\s+/g," ").trim();
+    function roomsFromOcr(text, teams) {
+      const t = norm(text);
+      const hits = [];
+      for (const team of teams) {
+        const n = norm(team.name);
+        if (n.length >= 5 && t.includes(n)) hits.push({ team, at: t.indexOf(n) });
       }
-    });
+      hits.sort((a,b)=>a.at-b.at);
+      const ids = hits.map(h => h.team.id);
+      const rooms = [];
+      for (let i=0;i<ids.length;i+=4) rooms.push(ids.slice(i,i+4));
+      return rooms;
+    }
 
-    // --- File path (same parsing + BP checks as the link path) ---
-    $("file").addEventListener("change", async (e) => {
-      const file = e.target.files[0]; if (!file) return;
-      const out = $("fileout");
-      out.textContent = "Parsing " + file.name + " …";
+    // ---- read one uploaded file into a parsed draw/standings ----
+    async function readFile(file, statusEl) {
+      if (isImage(file)) {
+        setStatus(statusEl, "Reading the screenshot… (first run downloads the reader)", "work");
+        const text = await ocr(file, (m)=>{ if(m.status==="recognizing text") setStatus(statusEl, `Reading the screenshot… ${Math.round(m.progress*100)}%`, "work"); });
+        return { kind: "image", text };
+      }
+      const html = await file.text();
+      return { kind: "html", result: loadFromHtml(html), html };
+    }
+
+    // ================= STEP 1: source =================
+    $("#pick-link").onclick = () => show("link");
+    $("#pick-upload").onclick = () => show("upload");
+    $$("[data-back]").forEach(b => b.onclick = () => show(b.dataset.back));
+
+    // ================= 1a: link =================
+    $("#link-go").onclick = async () => {
+      const link = $("#link-input").value.trim();
+      const st = $("#link-status");
+      if (!link) { setStatus(st, "Paste a link first.", "err"); return; }
+      setStatus(st, "Fetching standings and draw…", "work");
       try {
-        const r = loadFromHtml(await file.text());
-        if (r.kind === "standings") {
-          out.textContent = `✓ Standings · ${Object.keys(r.standings.teams).length} teams · rounds R${r.standings.roundsShown.join(", R")}`;
-        } else {
-          const t = r.draw.rooms.reduce((a, rm) => a + rm.teams.length, 0);
-          out.textContent = `✓ Draw · round ${r.draw.round ?? "?"} · ${r.draw.rooms.length} rooms · ${t} teams`;
+        const { standings, draw } = await loadTournament(link);
+        app.method = "link";
+        app.base = derivedUrls(link).base;
+        app.standings = standings;
+        app.currentDraw = draw;
+        setStatus(st, "Loading the team list…", "work");
+        const ppl = await loadParticipants(link);
+        app.participants = teamList(ppl, standings);
+        setStatus(st, `Read ${Object.keys(standings.teams).length} teams and ${draw.rooms.length} rooms.`, "ok");
+        // link data is reliable — go straight to the silent-round step
+        renderSilentIntro();
+        show("silent");
+      } catch (e) {
+        setStatus(st, e.message, "err");
+      }
+    };
+
+    // ================= 1b: upload =================
+    const uploads = { standings: null, draw: null };
+    function wireDrop(dropId, inputId, key, statusEl) {
+      const drop = $("#"+dropId), input = $("#"+inputId);
+      ["dragover","dragenter"].forEach(ev => drop.addEventListener(ev, e=>{e.preventDefault();drop.classList.add("over");}));
+      ["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e=>{e.preventDefault();drop.classList.remove("over");}));
+      drop.addEventListener("drop", e => { if(e.dataTransfer.files[0]){ input.files = e.dataTransfer.files; input.dispatchEvent(new Event("change")); }});
+      input.addEventListener("change", () => {
+        const f = input.files[0]; if (!f) return;
+        uploads[key] = f;
+        drop.classList.add("filled");
+        drop.querySelector("b").textContent = f.name.length>26 ? f.name.slice(0,24)+"…" : f.name;
+        $("#upload-go").disabled = !uploads.standings;
+      });
+    }
+    wireDrop("drop-standings","file-standings","standings");
+    wireDrop("drop-draw","file-draw","draw");
+
+    $("#upload-go").onclick = async () => {
+      const st = $("#upload-status");
+      try {
+        // standings (required)
+        setStatus(st, "Reading standings…", "work");
+        const sRead = await readFile(uploads.standings, st);
+        if (sRead.kind === "image") {
+          setStatus(st, "Standings from a screenshot aren't supported yet — please upload the saved standings page (.html). The draw can still be a screenshot.", "err");
+          return;
         }
-      } catch (err) { out.textContent = "✗ " + err.message; }
-    });
+        if (sRead.result.kind !== "standings") {
+          setStatus(st, "That file looks like a draw, not standings. Swap the two files.", "err"); return;
+        }
+        app.method = "upload";
+        app.standings = sRead.result.standings;
+        app.participants = teamList(sRead.result.standings);
+
+        // current draw (optional)
+        if (uploads.draw) {
+          const dRead = await readFile(uploads.draw, st);
+          if (dRead.kind === "image") {
+            app.currentDraw = { kind:"draw", rooms: roomsToObjects(roomsFromOcr(dRead.text, app.participants)) };
+            app._ocrText = dRead.text;
+          } else {
+            if (dRead.result.kind !== "draw") { setStatus(st, "The second file doesn't look like a draw.", "err"); return; }
+            app.currentDraw = dRead.result.draw;
+          }
+          app.reviewing = "current";
+          renderReview();
+          show("review");
+        } else {
+          // no current draw — skip review, go to silent step
+          app.currentDraw = null;
+          renderSilentIntro();
+          show("silent");
+        }
+      } catch (e) {
+        setStatus(st, e.message, "err");
+      }
+    };
+
+    // turn [[id,id,id,id]] into draw.rooms-like objects using participant names
+    function roomsToObjects(idRooms) {
+      const byId = Object.fromEntries(app.participants.map(t=>[t.id,t]));
+      const POS = ["OG","OO","CG","CO"];
+      return idRooms.map(ids => ({ teams: ids.map((id,i)=>({ id, name:(byId[id]||{}).name||"", pos:POS[i] })) }));
+    }
+
+    // ================= STEP 2: review =================
+    function renderReview() {
+      const draw = app.reviewing === "silent" ? app.silentDraw : app.currentDraw;
+      const rooms = (draw && draw.rooms) || [];
+      $("#review-stats").innerHTML =
+        `<div class="stat"><div class="v">${rooms.length}</div><div class="k">rooms read</div></div>` +
+        `<div class="stat"><div class="v">${app.participants.length}</div><div class="k">teams to choose from</div></div>` +
+        (app._ocrText ? `<div class="stat"><div class="v">OCR</div><div class="k">from screenshot — please verify</div></div>` : `<div class="stat"><div class="v">HTML</div><div class="k">read exactly</div></div>`);
+      const POS = ["OG","OO","CG","CO"];
+      const opts = (sel) => `<option value="">— pick team —</option>` +
+        app.participants.map(t => `<option value="${t.id}" ${t.id===sel?"selected":""}>${escapeHtml(t.name)}</option>`).join("");
+      $("#review-rooms").innerHTML = rooms.map((room,ri) => `
+        <div class="room">
+          <div class="rhead"><span>Room ${ri+1}</span><span>${room.teams.length}/4</span></div>
+          ${POS.map((p,pi) => {
+            const seat = room.teams[pi] || {};
+            return `<div class="seat"><span class="pos ${pi%2?'opp':''}">${p}</span>
+              <select data-room="${ri}" data-seat="${pi}">${opts(seat.id)}</select></div>`;
+          }).join("")}
+        </div>`).join("");
+      $$("#review-rooms select").forEach(sel => sel.onchange = () => {
+        const ri=+sel.dataset.room, pi=+sel.dataset.seat;
+        const team = app.participants.find(t=>t.id===sel.value);
+        const d = app.reviewing === "silent" ? app.silentDraw : app.currentDraw;
+        d.rooms[ri].teams[pi] = team ? { id:team.id, name:team.name, pos:POS[pi] } : {};
+      });
+    }
+    $("#review-back").onclick = () => show(app.method === "link" ? "link" : (app.reviewing==="silent"?"silent":"upload"));
+    $("#review-go").onclick = () => {
+      if (app.reviewing === "silent") { renderReady(); show("ready"); }
+      else { renderSilentIntro(); show("silent"); }
+    };
+
+    // ================= STEP 3: silent =================
+    function renderSilentIntro(){ setStatus($("#silent-status"), "", ""); $("#silent-go").disabled = !app.silentDraw; }
+    (function wireSilent(){
+      const drop=$("#drop-silent"), input=$("#file-silent"), st=$("#silent-status");
+      ["dragover","dragenter"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("over");}));
+      ["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("over");}));
+      drop.addEventListener("drop",e=>{ if(e.dataTransfer.files[0]){ input.files=e.dataTransfer.files; input.dispatchEvent(new Event("change")); }});
+      input.addEventListener("change", async () => {
+        const f = input.files[0]; if(!f) return;
+        drop.classList.add("filled"); drop.querySelector("b").textContent = f.name.length>30?f.name.slice(0,28)+"…":f.name;
+        try {
+          const read = await readFile(f, st);
+          if (read.kind === "image") {
+            app.silentDraw = { kind:"draw", rooms: roomsToObjects(roomsFromOcr(read.text, app.participants)) };
+            app._ocrText = read.text;
+            setStatus(st, "Read the screenshot — check it on the next screen.", "ok");
+          } else {
+            const r = read.result;
+            // accept a draw OR a results page (both give room line-ups)
+            const draw = r.kind === "draw" ? r.draw : null;
+            if (!draw) { setStatus(st, "That looks like standings, not a draw or results page.", "err"); return; }
+            app.silentDraw = draw;
+            setStatus(st, `Read ${draw.rooms.length} rooms.`, "ok");
+          }
+          $("#silent-go").disabled = false;
+        } catch(e){ setStatus(st, e.message, "err"); }
+      });
+    })();
+    $("#silent-back").onclick = () => show(app.currentDraw ? (app.method==="link"?"link":"review") : (app.method==="link"?"link":"upload"));
+    $("#silent-skip").onclick = () => { app.silentDraw = null; renderReady(); show("ready"); };
+    $("#silent-go").onclick = () => {
+      if (app._ocrText && app.silentDraw) { app.reviewing="silent"; renderReview(); show("review"); }
+      else { renderReady(); show("ready"); }
+    };
+
+    // ================= STEP 4: ready =================
+    function postR(teams, upto){ // total points through round `upto`, ignoring later rounds
+      const out={}; for(const id in teams){ let p=0; for(let r=1;r<=upto;r++){const c=teams[id].perRound[r]; if(c&&c.points!=null)p+=c.points;} out[id]=p; } return out;
+    }
+    function renderReady() {
+      const s = app.standings, cd = app.currentDraw, sd = app.silentDraw;
+      const nTeams = s ? Object.keys(s.teams).length : 0;
+      $("#ready-stats").innerHTML =
+        `<div class="stat"><div class="v">${nTeams}</div><div class="k">teams</div></div>`+
+        `<div class="stat"><div class="v">${cd?cd.rooms.length:'—'}</div><div class="k">current-draw rooms</div></div>`+
+        `<div class="stat"><div class="v">${sd?sd.rooms.length:'—'}</div><div class="k">silent-round rooms</div></div>`;
+      $("#ready-detail").innerHTML = "";
+      $("#ready-note").textContent = sd
+        ? "With the silent-round draw, each room is pinned to one 1st/2nd/3rd/4th — the prediction cross-checks that against the current draw."
+        : "No silent-round draw given — predictions will use the current draw alone. Adding the silent draw sharpens them considerably.";
+      setStatus($("#ready-status"), "", "");
+    }
+    $("#ready-go").onclick = () => {
+      setStatus($("#ready-status"),
+        "Inputs are captured. The prediction engine — pullup-based probabilities over the cycle — is the next piece being built, and slots in right here.", "work");
+    };
+
+    function escapeHtml(s){ return (s||"").replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   </script>
 </body>
 </html>
