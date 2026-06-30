@@ -5,7 +5,7 @@
 // whatever tournament link the user pastes, fetch them through the proxy
 // Worker (CORS), and run the HTML through the parser we already have.
 
-import { parseStandings, parseDraw, extractTablesData } from "./parse.js";
+import { parseStandings, parseDraw, parseParticipants, extractTablesData } from "./parse.js";
 import { WORKER_URL } from "./config.js";
 
 // Fixed public paths, relative to the tournament base ".../<slug>/".
@@ -133,6 +133,30 @@ export function nonBpDrawMessage(draw) {
     return "This looks like a non-BP tournament (rooms don't have 4 teams) — this tool only supports British Parliamentary.";
   }
   return null;
+}
+
+// Fetch + parse the participants list (best-effort; used for correction dropdowns).
+export async function loadParticipants(pastedUrl, workerUrl = WORKER_URL) {
+  const urls = derivedUrls(pastedUrl);
+  try {
+    const html = await fetchViaWorker(workerUrl, urls.participants);
+    return parseParticipants(html).teams;
+  } catch {
+    return {};
+  }
+}
+
+// Canonical {id,name}[] team list for dropdowns, from whatever we have parsed.
+export function teamList(...sources) {
+  const seen = {};
+  for (const src of sources) {
+    const teams = src && src.teams ? src.teams : src;
+    for (const id in (teams || {})) {
+      const t = teams[id];
+      if (t && t.name && !seen[id]) seen[id] = { id, name: t.name, emoji: t.emoji || "" };
+    }
+  }
+  return Object.values(seen).sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 }
 
 // Upload path: classify a saved page as standings or draw (by how many team
