@@ -343,3 +343,26 @@ button.btn:focus-visible { outline: 2.5px solid var(--gov); outline-offset: 2px;
 .seg-btn.active { background: var(--surface); color: var(--gov-deep); box-shadow: var(--shadow-sm); }
 .seg-btn:focus-visible { outline: 2px solid var(--gov); outline-offset: 1px; }
 .panel[hidden] { display: none; }
+
+/* ---------- placement colours (iconic BP result colours) ---------- */
+:root { --p1:#00bf8a; --p2:#17a2b8; --p3:#fd681d; --p4:#d1185e; }
+
+/* prediction pills: coloured by placement; most-likely solid, rest faded */
+.ppill { display:inline-flex; align-items:center; gap:5px; font-family:'JetBrains Mono',monospace;
+  font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:999px;
+  border:1px solid transparent; white-space:nowrap; transition:opacity .15s; }
+.ppill svg { width:11px; height:11px; }
+.ppill.top { }              /* solid — styled inline with its colour */
+.ppill.dim { opacity:.4; }  /* faded alternatives */
+
+.predrow { display:flex; align-items:center; gap:12px; padding:9px 2px; border-top:1px solid var(--line-soft); }
+.predrow .who { flex:1; min-width:0; }
+.predrow .who b { font-weight:600; }
+.predrow .who span { color:var(--muted); font-size:12px; }
+.predrow .bars { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+
+/* ---------- dropzone shape fix: proper centered card ---------- */
+.drop { display:flex; flex-direction:column; align-items:center; justify-content:center;
+  min-height:150px; padding:24px 20px; gap:2px; }
+.drop .ic { flex:0 0 auto; width:28px; height:28px; margin-bottom:10px; }
+.drop.filled .ic { color: var(--gov); }
