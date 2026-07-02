@@ -154,7 +154,8 @@
     function show(id) {
       $$(".screen").forEach((s) => s.classList.remove("show"));
       $("#s-" + id).classList.add("show");
-      const group = { standings:"standings", draw:"draw", review:"draw", silent:"silent", ready:"ready" }[id];
+      const group = { standings:"standings", draw:"draw", silent:"silent", ready:"ready",
+        review: (app.reviewing==="silent" ? "silent" : "draw") }[id];
       const idx = STEPS.indexOf(group);
       $$(".stepper .st").forEach((st, i) => { st.classList.toggle("active", i === idx); st.classList.toggle("done", i < idx); });
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -232,7 +233,7 @@
       } catch(e){ setStatus(st, e.message+" — provide it another way below.", "err"); $("#dr-question").hidden=true; $("#dr-sources").hidden=false; }
     };
     $("#dr-no").onclick = () => { $("#dr-question").hidden=true; $("#dr-sources").hidden=false; };
-    $("#dr-next").onclick = () => show("silent");
+    $("#dr-next").onclick = () => { app.reviewing="current"; app.reviewReturn="silent"; renderReview(); show("review"); };
     $("#dr-link-go").onclick = async () => {
       const link=($("#dr-link").value.trim()||app.base), st=$("#dr-status");
       if(!link){ setStatus(st,"Paste a link (or go back and use one for standings).","err"); return; }
@@ -247,7 +248,7 @@
         if(isImage(f)){ setStatus(st,"Reading the screenshot… (first run downloads the reader)","work");
           const text=await ocr(f,(m)=>{ if(m.status==="recognizing text") setStatus(st,`Reading… ${Math.round(m.progress*100)}%`,"work"); });
           app.currentDraw={kind:"draw",rooms:roomsToObjects(roomsFromOcr(text,app.participants))}; app._ocrText=text;
-          app.reviewing="current"; app.reviewReturn="draw"; renderReview(); show("review"); return;
+          setStatus(st,"Read the screenshot — confirm it on the next step.","ok"); $("#dr-next").disabled=false; return;
         }
         const r=loadFromHtml(await f.text());
         if(r.kind!=="draw"){ setStatus(st,"That looks like standings, not a draw.","err"); return; }
@@ -269,9 +270,8 @@
       $$("#review-rooms select").forEach(sel=>sel.onchange=()=>{ const ri=+sel.dataset.room,pi=+sel.dataset.seat; const team=app.participants.find(t=>t.id===sel.value); const d=app.reviewing==="silent"?app.silentDraw:app.currentDraw; d.rooms[ri].teams[pi]=team?{id:team.id,name:team.name,pos:POS[pi]}:{}; });
     }
     $("#review-back").onclick = () => show(app.reviewing==="silent" ? "silent" : "draw");
-    $("#review-go").onclick = () => { app._ocrText=null; show(app.reviewReturn);
-      if(app.reviewReturn==="ready") renderReady();
-      if(app.reviewReturn==="draw") $("#dr-next").disabled = !app.currentDraw;
+    $("#review-go").onclick = () => { app._ocrText=null;
+      if(app.reviewReturn==="ready"){ renderReady(); show("ready"); } else show(app.reviewReturn);
     };
 
     // ================= STEP 3: SILENT =================
@@ -289,10 +289,7 @@
       } catch(e){ setStatus(st, e.message, "err"); }
     });
     $("#silent-skip").onclick = () => { app.silentDraw=null; renderReady(); show("ready"); };
-    $("#silent-go").onclick = () => {
-      if(app._ocrText && app.silentDraw){ app.reviewing="silent"; app.reviewReturn="ready"; renderReview(); show("review"); }
-      else { renderReady(); show("ready"); }
-    };
+    $("#silent-go").onclick = () => { app.reviewing="silent"; app.reviewReturn="ready"; renderReview(); show("review"); };
 
     // ================= STEP 4: PREDICT =================
     function renderReady(){
@@ -324,10 +321,23 @@
       } catch(e){ setStatus(st, e.message, "err"); }
     };
     function renderPredictions(perTeam, pre, teams){
-      const LBL=["4th","3rd","2nd","1st"];
+      const LBL={3:"1st",2:"2nd",1:"3rd",0:"4th"};
+      const COL={3:"#00bf8a",2:"#17a2b8",1:"#fd681d",0:"#d1185e"}; // 1st/2nd/3rd/4th
+      const CHEV={
+        3:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l5-5 5 5"/><path d="M3 12.5l5-5 5 5"/></svg>',
+        2:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5l5-5 5 5"/></svg>',
+        1:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5.5l5 5 5-5"/></svg>',
+        0:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3.5l5 5 5-5"/><path d="M3 7.5l5 5 5-5"/></svg>'
+      };
       const ids=Object.keys(perTeam).sort((a,b)=>(teams[a].name||"").toLowerCase().localeCompare((teams[b].name||"").toLowerCase()));
-      const bar=(d)=>[3,2,1,0].map(r=>{const pc=Math.round(d[r]*100); return pc>=1?`<span class="pill ${r===3?"brass":"green"}" style="opacity:${0.4+d[r]*0.6}">${LBL[r]} ${pc}%</span>`:"";}).join(" ");
-      $("#ready-detail").innerHTML=`<div class="rooms" style="margin-top:6px">`+ids.map(id=>`<div class="seat" style="border-top:1px solid var(--line-soft)"><span style="flex:1"><b style="font-weight:600">${escapeHtml(teams[id].name)}</b> <span style="color:var(--muted);font-size:12px">· ${pre[id]} pts</span></span><span style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end">${bar(perTeam[id])}</span></div>`).join("")+`</div>`;
+      const bar=(d)=>{ const m=d.indexOf(Math.max(...d));
+        return [3,2,1,0].map(r=>{ const pc=Math.round(d[r]*100); if(pc<1)return "";
+          const top=(r===m);
+          const style=top ? `color:${COL[r]};background:${COL[r]}1a;border-color:${COL[r]}59` : `color:${COL[r]}`;
+          return `<span class="ppill ${top?'top':'dim'}" style="${style}">${CHEV[r]}${LBL[r]} ${pc}%</span>`;
+        }).join("");
+      };
+      $("#ready-detail").innerHTML=ids.map(id=>`<div class="predrow"><span class="who"><b>${escapeHtml(teams[id].name)}</b> <span>· ${pre[id]} pts</span></span><span class="bars">${bar(perTeam[id])}</span></div>`).join("");
     }
   </script>
 </body>
