@@ -81,6 +81,17 @@ export async function loadStandingsOnly(pastedUrl, workerUrl = WORKER_URL) {
   return { url: urls.standings, standings: parseStandings(html) };
 }
 
+// Fetch + parse ONLY the current draw from a link (independent of standings).
+export async function loadDrawOnly(pastedUrl, workerUrl = WORKER_URL) {
+  const urls = derivedUrls(pastedUrl);
+  const html = await fetchViaWorker(workerUrl, urls.draw);
+  const draw = parseDraw(html);
+  const nb = nonBpDrawMessage(draw);
+  if (nb) throw new Error(nb);
+  if (!draw.rooms.length) throw new Error("The current draw isn't released on that link yet — you can upload it instead.");
+  return { url: urls.draw, draw };
+}
+
 // Load the two required pages from a pasted link and parse them.
 export async function loadTournament(pastedUrl, workerUrl = WORKER_URL) {
   if (!workerUrl) throw new Error("No proxy configured yet — set WORKER_URL in config.js, or upload the pages instead.");
