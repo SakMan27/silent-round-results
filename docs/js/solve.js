@@ -254,36 +254,90 @@ export function predictRoomsCalibrated({ prevPoints, rooms, lambda = PULLUP_LAMB
 //   result index: 0 = 4th (0 pts) … 3 = 1st (3 pts)
 // ===========================================================================
 
-export function inferSilentRound({ prevPoints, nextRooms }) {
+export function inferSilentRound({ prevPoints, nextRooms, silentRooms = null }) {
+  const level0 = level0Read(prevPoints, nextRooms);
+  if (!silentRooms || !silentRooms.length) return { perTeam: level0 };
+  return { perTeam: crossCheck(prevPoints, nextRooms, silentRooms, level0) };
+}
+
+// Level 0: read each next-round room on its own (pullup counting).
+function level0Read(prevPoints, nextRooms) {
   const perTeam = {};
   for (const room of nextRooms) {
     const ids = room.map((t) => (typeof t === "string" ? t : t.id));
     const p = ids.map((id) => prevPoints[id]);
-    const byPre = [...ids.keys()].sort((a, b) => p[b] - p[a]); // highest pre first
+    const byPre = [...ids.keys()].sort((a, b) => p[b] - p[a]);
     const lo = Math.min(...p), hi = Math.max(...p);
-
     const configs = [];
-    for (let B = lo - 1; B <= hi + 1; B++) {          // room's lower level
-      for (let k = 0; k <= 4; k++) {                  // k highest-pre teams pulled down to B+1
+    for (let B = lo - 1; B <= hi + 1; B++) {
+      for (let k = 0; k <= 4; k++) {
         const upper = new Set(byPre.slice(0, k));
         let ok = true;
-        const res = p.map((pp, i) => {
-          const level = upper.has(i) ? B + 1 : B;
-          const r = level - pp;
-          if (r < 0 || r > 3) ok = false;
-          return r;
-        });
+        const res = p.map((pp, i) => { const level = upper.has(i) ? B + 1 : B; const r = level - pp; if (r < 0 || r > 3) ok = false; return r; });
         if (ok) configs.push(res);
       }
     }
     const Z = configs.length || 1;
-    ids.forEach((id, i) => {
-      const d = [0, 0, 0, 0];
-      for (const c of configs) d[c[i]] += 1;
-      perTeam[id] = pullFloor(d.map((x) => x / Z));
-    });
+    ids.forEach((id, i) => { const d = [0, 0, 0, 0]; for (const c of configs) d[c[i]] += 1; perTeam[id] = pullFloor(d.map((x) => x / Z)); });
   }
-  return { perTeam };
+  return perTeam;
+}
+
+// ---------------------------------------------------------------------------
+// Silent-draw cross-check (the back-and-forth cycle). Each team carries a
+// running distribution over its silent-round result. We repeatedly compare it
+// two ways and multiply the evidence, until a full pass changes nothing:
+//   • its SILENT room — the four results are a permutation of {3,2,1,0}, so
+//     impossible combinations (e.g. two teammates both 1st) get deleted;
+//   • its NEXT-DRAW room — the pullup reading, now weighted by current beliefs.
+// A true constraint only ever removes possibility, so this settles (fixpoint).
+// ---------------------------------------------------------------------------
+function crossCheck(prevPoints, nextRooms, silentRooms, level0) {
+  const norm = (d) => { const s = d.reduce((a, b) => a + b, 0) || 1; return d.map((x) => x / s); };
+  const mul = (a, b) => norm(a.map((x, i) => Math.max(x, 1e-6) * Math.max(b[i], 1e-6)));
+
+  const belief = {}; for (const id in level0) belief[id] = level0[id].slice();
+  const asIds = (rm) => rm.map((t) => (typeof t === "string" ? t : t.id));
+
+  // message from a SILENT room: keep only {3,2,1,0}-permutation assignments
+  const r4Message = (prior) => {
+    const acc = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+    for (const perm of PERMS_3210) {
+      let w = 1; for (let i = 0; i < 4; i++) w *= Math.max(prior[i][perm[i]], 1e-6);
+      for (let i = 0; i < 4; i++) acc[i][perm[i]] += w;
+    }
+    return acc.map(norm);
+  };
+  // message from a NEXT-DRAW room: pullup arrangements weighted by current belief
+  const r5Message = (pre, prior) => {
+    const lo = Math.min(...pre), hi = Math.max(...pre);
+    const byPre = [...pre.keys()].sort((a, b) => pre[b] - pre[a]);
+    const acc = pre.map(() => [0, 0, 0, 0]);
+    for (let B = lo - 1; B <= hi + 1; B++) for (let k = 0; k <= 4; k++) {
+      const upper = new Set(byPre.slice(0, k)); let ok = true;
+      const res = pre.map((pp, i) => { const L = upper.has(i) ? B + 1 : B; const r = L - pp; if (r < 0 || r > 3) ok = false; return r; });
+      if (!ok) continue;
+      let w = 1; for (let i = 0; i < 4; i++) w *= Math.max(prior[i][res[i]], 1e-6);
+      for (let i = 0; i < 4; i++) acc[i][res[i]] += w;
+    }
+    return acc.map(norm);
+  };
+
+  for (let iter = 0; iter < 50; iter++) {
+    const r4msg = {}, r5msg = {};
+    for (const rm of silentRooms) { const ids = asIds(rm); const m = r4Message(ids.map((id) => belief[id])); ids.forEach((id, i) => r4msg[id] = m[i]); }
+    for (const rm of nextRooms) { const ids = asIds(rm); const m = r5Message(ids.map((id) => prevPoints[id]), ids.map((id) => belief[id])); ids.forEach((id, i) => r5msg[id] = m[i]); }
+    let maxDelta = 0; const next = {};
+    for (const id in belief) {
+      const c = mul(r4msg[id] || belief[id], r5msg[id] || belief[id]);
+      maxDelta = Math.max(maxDelta, ...c.map((x, i) => Math.abs(x - belief[id][i])));
+      next[id] = c;
+    }
+    Object.assign(belief, next);
+    if (maxDelta < 1e-4) break;
+  }
+  for (const id in belief) belief[id] = pullFloor(belief[id]);
+  return belief;
 }
 
 // Nothing is ever fully certain: shave a hard 100% and hand it to the neighbour
