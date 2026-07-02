@@ -302,8 +302,8 @@
         `<div class="stat"><div class="v">${cd?cd.rooms.length:'—'}</div><div class="k">current-draw rooms</div></div>`+
         `<div class="stat"><div class="v">${sd?sd.rooms.length:'—'}</div><div class="k">silent-round rooms</div></div>`;
       $("#ready-note").textContent = sd
-        ? "Silent-round draw provided — cross-checking against it is the next engine layer; for now predictions use the current draw."
-        : "Predicting from the current draw alone.";
+        ? "Silent-round draw provided — predictions are cross-checked against it (each room = one 1st/2nd/3rd/4th), which sharpens them."
+        : "Predicting from the current draw alone. Adding the silent-round draw sharpens this.";
       $("#ready-detail").innerHTML=""; setStatus($("#ready-status"),"","");
     }
     $("#ready-go").onclick = () => {
@@ -315,9 +315,12 @@
         const rooms=app.currentDraw.rooms.map(r=>r.teams.map(t=>t.id).filter(Boolean));
         if(!rooms.length || rooms.some(r=>r.length!==4)){ setStatus(st,"Need a complete current draw (rooms of 4).","err"); return; }
         if(rooms.flat().some(id=>pre[id]==null)){ setStatus(st,"Some drawn teams aren't in the standings — re-check the draw.","err"); return; }
-        const { perTeam } = inferSilentRound({ prevPoints: pre, nextRooms: rooms });
+        let silentRooms = null;
+        if(app.silentDraw){ silentRooms = app.silentDraw.rooms.map(r=>r.teams.map(t=>t.id).filter(Boolean)).filter(r=>r.length===4);
+          if(!silentRooms.length) silentRooms=null; }
+        const { perTeam } = inferSilentRound({ prevPoints: pre, nextRooms: rooms, silentRooms });
         renderPredictions(perTeam, pre, teams);
-        setStatus(st,"Done.","ok");
+        setStatus(st, silentRooms ? "Done — cross-checked against the silent-round draw." : "Done — from the current draw alone.", "ok");
       } catch(e){ setStatus(st, e.message, "err"); }
     };
     function renderPredictions(perTeam, pre, teams){
