@@ -333,3 +333,13 @@ button.btn:focus-visible { outline: 2.5px solid var(--gov); outline-offset: 2px;
 
 .foot { margin-top: 34px; color: var(--muted-2); font-size: 12px; text-align:center; }
 .foot a { color: var(--muted); }
+
+/* ---------- segmented link/upload toggle ---------- */
+.seg { display: inline-flex; gap: 4px; padding: 4px; background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: var(--radius-sm); margin-bottom: 16px; }
+.seg-btn { font: inherit; font-size: 13.5px; font-weight: 600; color: var(--muted);
+  background: transparent; border: none; padding: 7px 15px; border-radius: 6px; cursor: pointer;
+  transition: background .15s, color .15s; }
+.seg-btn.active { background: var(--surface); color: var(--gov-deep); box-shadow: var(--shadow-sm); }
+.seg-btn:focus-visible { outline: 2px solid var(--gov); outline-offset: 1px; }
+.panel[hidden] { display: none; }
