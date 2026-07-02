@@ -151,6 +151,7 @@
   <script type="module">
     import { loadTournament, loadFromHtml, loadParticipants, teamList, derivedUrls } from "./js/sources.js";
     import { parseDraw, parseStandings, parseParticipants } from "./js/parse.js";
+    import { inferSilentRound } from "./js/solve.js";
 
     const $ = (s) => document.querySelector(s);
     const $$ = (s) => Array.from(document.querySelectorAll(s));
@@ -413,9 +414,48 @@
       setStatus($("#ready-status"), "", "");
     }
     $("#ready-go").onclick = () => {
-      setStatus($("#ready-status"),
-        "Inputs are captured. The prediction engine — pullup-based probabilities over the cycle — is the next piece being built, and slots in right here.", "work");
+      const st = $("#ready-status");
+      try {
+        const teams = app.standings.teams;
+        // pre-silent-round points = total of the rounds shown in standings
+        const shown = app.standings.roundsShown;
+        const pre = {};
+        for (const id in teams) {
+          let p = 0;
+          for (const r of shown) { const c = teams[id].perRound[r]; if (c && c.points != null) p += c.points; }
+          pre[id] = p;
+        }
+        const rooms = app.currentDraw.rooms.map((r) => r.teams.map((t) => t.id).filter(Boolean));
+        if (!rooms.length || rooms.some((r) => r.length !== 4)) {
+          setStatus(st, "Need a complete current draw (rooms of 4) to predict from.", "err"); return;
+        }
+        if (rooms.flat().some((id) => pre[id] == null)) {
+          setStatus(st, "Some drawn teams aren't in the standings — check the review step.", "err"); return;
+        }
+        const { perTeam } = inferSilentRound({ prevPoints: pre, nextRooms: rooms });
+        renderPredictions(perTeam, pre, teams);
+        setStatus(st, app.silentDraw
+          ? "Predicted from the current draw. (Silent-draw cross-checking is the next engine layer.)"
+          : "Predicted from the current draw alone.", "ok");
+      } catch (e) { setStatus(st, e.message, "err"); }
     };
+
+    function renderPredictions(perTeam, pre, teams) {
+      const LBL = ["4th", "3rd", "2nd", "1st"]; // index = points
+      const ids = Object.keys(perTeam).sort((a, b) =>
+        (teams[a].name || "").toLowerCase().localeCompare((teams[b].name || "").toLowerCase()));
+      const bar = (d) => [3, 2, 1, 0].map((r) => {
+        const pc = Math.round(d[r] * 100);
+        return pc >= 1 ? `<span class="pill ${r === 3 ? "brass" : "green"}" style="opacity:${0.4 + d[r] * 0.6}">${LBL[r]} ${pc}%</span>` : "";
+      }).join(" ");
+      $("#ready-detail").innerHTML =
+        `<div class="rooms" style="margin-top:4px">` +
+        ids.map((id) => `<div class="seat" style="border-top:1px solid var(--line-soft)">
+            <span style="flex:1"><b style="font-weight:600">${escapeHtml(teams[id].name)}</b>
+              <span style="color:var(--muted);font-size:12px">· ${pre[id]} pts</span></span>
+            <span style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end">${bar(perTeam[id])}</span>
+          </div>`).join("") + `</div>`;
+    }
 
     function escapeHtml(s){ return (s||"").replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   </script>
