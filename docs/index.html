@@ -324,10 +324,10 @@
       const LBL={3:"1st",2:"2nd",1:"3rd",0:"4th"};
       const COL={3:"#00bf8a",2:"#17a2b8",1:"#fd681d",0:"#d1185e"}; // 1st/2nd/3rd/4th
       const CHEV={
-        3:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l5-5 5 5"/><path d="M3 12.5l5-5 5 5"/></svg>',
+        3:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l5-5 5 5"/><path d="M3 13l5-5 5 5"/></svg>',
         2:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5l5-5 5 5"/></svg>',
         1:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5.5l5 5 5-5"/></svg>',
-        0:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3.5l5 5 5-5"/><path d="M3 7.5l5 5 5-5"/></svg>'
+        0:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l5 5 5-5"/><path d="M3 8l5 5 5-5"/></svg>'
       };
       const ids=Object.keys(perTeam).sort((a,b)=>(teams[a].name||"").toLowerCase().localeCompare((teams[b].name||"").toLowerCase()));
       const bar=(d)=>{ const m=d.indexOf(Math.max(...d));
