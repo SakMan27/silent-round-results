@@ -78,14 +78,39 @@ export async function fetchViaWorker(workerUrl, targetUrl) {
 export async function loadStandingsOnly(pastedUrl, workerUrl = WORKER_URL) {
   const urls = derivedUrls(pastedUrl);
   const html = await fetchViaWorker(workerUrl, urls.standings);
-  return { url: urls.standings, standings: parseStandings(html) };
+  let standings;
+  try { standings = parseStandings(html); }
+  catch { throw new Error("The standings page loaded, but it doesn't look like a public Calicotab/Tabbycat standings page. Check the link, or that public standings are enabled."); }
+  if (!Object.keys(standings.teams).length) {
+    throw new Error("No teams found on the standings page — are public standings enabled for this tournament?");
+  }
+  const nb = standingsFormatIssue(standings);
+  if (nb) throw new Error(nb);
+  return { url: urls.standings, standings };
+}
+
+// Detect a non-BP tournament straight from the standings, by the size of the
+// rooms embedded in each per-round result cell (BP = 4 teams; WSDC etc. = 2).
+function standingsFormatIssue(standings) {
+  const sizes = {};
+  for (const id in standings.teams) {
+    const pr = standings.teams[id].perRound || {};
+    for (const r in pr) { const cell = pr[r]; if (cell && cell.room && cell.room.length) sizes[cell.room.length] = (sizes[cell.room.length] || 0) + 1; }
+  }
+  const present = Object.keys(sizes).map(Number);
+  if (!present.length) return null; // no room info to judge from
+  const dominant = present.sort((a, b) => sizes[b] - sizes[a])[0];
+  if (dominant !== 4) return `This looks like a non-BP tournament (${dominant} teams per room) — this tool only supports British Parliamentary.`;
+  return null;
 }
 
 // Fetch + parse ONLY the current draw from a link (independent of standings).
 export async function loadDrawOnly(pastedUrl, workerUrl = WORKER_URL) {
   const urls = derivedUrls(pastedUrl);
   const html = await fetchViaWorker(workerUrl, urls.draw);
-  const draw = parseDraw(html);
+  let draw;
+  try { draw = parseDraw(html); }
+  catch { throw new Error("Couldn't read the draw page — is the link a Calicotab/Tabbycat tournament?"); }
   const nb = nonBpDrawMessage(draw);
   if (nb) throw new Error(nb);
   if (!draw.rooms.length) throw new Error("The current draw isn't released on that link yet — you can upload it instead.");
