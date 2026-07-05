@@ -296,8 +296,13 @@ function crossCheck(prevPoints, nextRooms, silentRooms, level0) {
   const norm = (d) => { const s = d.reduce((a, b) => a + b, 0) || 1; return d.map((x) => x / s); };
   const mul = (a, b) => norm(a.map((x, i) => Math.max(x, 1e-6) * Math.max(b[i], 1e-6)));
 
-  const belief = {}; for (const id in level0) belief[id] = level0[id].slice();
   const asIds = (rm) => rm.map((t) => (typeof t === "string" ? t : t.id));
+  const UNIFORM = [0.25, 0.25, 0.25, 0.25];
+  const belief = {}; for (const id in level0) belief[id] = level0[id].slice();
+  // A team can appear in the silent draw but not the current draw (mismatched
+  // team sets — e.g. one side is a results page). Seed those with a flat prior so
+  // the cycle never reads an undefined belief.
+  for (const rm of silentRooms) for (const id of asIds(rm)) if (!belief[id]) belief[id] = UNIFORM.slice();
 
   // message from a SILENT room: keep only {3,2,1,0}-permutation assignments
   const r4Message = (prior) => {
@@ -325,8 +330,8 @@ function crossCheck(prevPoints, nextRooms, silentRooms, level0) {
 
   for (let iter = 0; iter < 50; iter++) {
     const r4msg = {}, r5msg = {};
-    for (const rm of silentRooms) { const ids = asIds(rm); const m = r4Message(ids.map((id) => belief[id])); ids.forEach((id, i) => r4msg[id] = m[i]); }
-    for (const rm of nextRooms) { const ids = asIds(rm); const m = r5Message(ids.map((id) => prevPoints[id]), ids.map((id) => belief[id])); ids.forEach((id, i) => r5msg[id] = m[i]); }
+    for (const rm of silentRooms) { const ids = asIds(rm); const m = r4Message(ids.map((id) => belief[id] || UNIFORM)); ids.forEach((id, i) => r4msg[id] = m[i]); }
+    for (const rm of nextRooms) { const ids = asIds(rm); const m = r5Message(ids.map((id) => prevPoints[id]), ids.map((id) => belief[id] || UNIFORM)); ids.forEach((id, i) => r5msg[id] = m[i]); }
     let maxDelta = 0; const next = {};
     for (const id in belief) {
       const c = mul(r4msg[id] || belief[id], r5msg[id] || belief[id]);
@@ -336,8 +341,9 @@ function crossCheck(prevPoints, nextRooms, silentRooms, level0) {
     Object.assign(belief, next);
     if (maxDelta < 1e-4) break;
   }
-  for (const id in belief) belief[id] = pullFloor(belief[id]);
-  return belief;
+  const out = {};
+  for (const id in level0) out[id] = pullFloor(belief[id] || level0[id]);
+  return out;
 }
 
 // Nothing is ever fully certain: shave a hard 100% and hand it to the neighbour
