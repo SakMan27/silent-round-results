@@ -45,13 +45,30 @@
           </label>
         </div>
         <div class="status" id="st-status"></div>
-        <div class="row end" style="margin-top:14px"><button class="btn primary" id="st-next" disabled>Next →</button></div>
+      </div>
+
+      <div class="card" id="round-setup" hidden>
+        <h2 style="font-size:16px;font-family:'Fraunces',serif;font-weight:500;margin:0 0 3px">Which round is silent?</h2>
+        <p class="sub" style="margin:0 0 14px">Auto-detected from your standings — change only if it's wrong.</p>
+        <div class="row" style="gap:8px;margin-bottom:14px">
+          <button class="btn ghost" data-preset="standard" style="font-size:13px;padding:8px 13px">Standard · R4 silent</button>
+          <button class="btn ghost" data-preset="wudc" style="font-size:13px;padding:8px 13px">WUDC/EUDC · R7–9</button>
+          <button class="btn ghost" data-preset="custom" style="font-size:13px;padding:8px 13px">Custom</button>
+        </div>
+        <div class="row" style="gap:14px;align-items:flex-end">
+          <label class="field" style="flex:1;margin:0"><span class="lab">First silent round</span>
+            <input type="number" id="rs-first" min="1" step="1"></label>
+          <label class="field" style="flex:1;margin:0"><span class="lab">How many rounds silent</span>
+            <input type="number" id="rs-count" min="1" step="1" value="1"></label>
+        </div>
+        <div class="note" id="rs-summary" style="margin-top:14px"></div>
+        <div class="row end" style="margin-top:16px"><button class="btn primary" id="st-next" disabled>Next →</button></div>
       </div>
     </section>
 
     <!-- ============ STEP 2: CURRENT DRAW ============ -->
     <section class="screen" id="s-draw">
-      <div class="lead"><h1>Load the <em>current draw</em></h1>
+      <div class="lead"><h1>Load the <em>current draw</em> <span style="font-size:14px;color:var(--muted);font-style:normal">— required</span></h1>
         <p>The most recent draw — the one that reveals the post-silent-round groupings. A results page works too (only the line-ups are used).</p></div>
       <div class="card">
         <!-- shown only when standings came from a link -->
@@ -103,14 +120,20 @@
 
     <!-- ============ STEP 3: SILENT DRAW ============ -->
     <section class="screen" id="s-silent">
-      <div class="lead"><h1>Add the <em>silent-round</em> draw <span style="font-size:14px;color:var(--muted);font-style:normal">— optional</span></h1>
+      <div class="lead"><h1>Add the <em>silent-round</em> draw <span style="font-size:14px;color:var(--muted);font-style:normal">— recommended</span></h1>
         <p>The silent round's own draw pins each room to exactly one 1st/2nd/3rd/4th, which cross-checks and sharpens the prediction. Upload it as a page or screenshot.</p></div>
       <div class="card">
-        <label class="drop" id="drop-silent">
-          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16M15 4v16"/></svg>
-          <b>Silent-round draw or results</b><small>.html or screenshot</small>
-          <input type="file" id="file-silent" accept=".html,.htm,image/*" />
-        </label>
+        <div id="silent-single">
+          <label class="drop" id="drop-silent">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16M15 4v16"/></svg>
+            <b>Silent-round draw or results</b><small>.html or screenshot</small>
+            <input type="file" id="file-silent" accept=".html,.htm,image/*" />
+          </label>
+        </div>
+        <div id="silent-block" hidden>
+          <p class="sub" id="block-draws-note" style="margin:0 0 12px"></p>
+          <div id="rs-draws"></div>
+        </div>
         <div class="status" id="silent-status"></div>
         <div class="row between" style="margin-top:18px">
           <button class="btn link" data-back="draw">← Current draw</button>
@@ -126,6 +149,7 @@
     <section class="screen" id="s-ready">
       <div class="lead"><h1>Predictions</h1>
         <p>Each team's silent-round placement, as a probability — confident where the brackets are clean, appropriately unsure where teams may have been pulled.</p></div>
+
       <div class="card">
         <div class="stats" id="ready-stats"></div>
         <div class="row between" style="margin:2px 0 14px">
@@ -143,12 +167,12 @@
 
   <script type="module">
     import { loadStandingsOnly, loadDrawOnly, loadFromHtml, loadParticipants, teamList, derivedUrls } from "./js/sources.js";
-    import { inferSilentRound } from "./js/solve.js";
+    import { inferSilentRound, inferSilentBlock } from "./js/solve.js";
 
     const $ = (s) => document.querySelector(s);
     const $$ = (s) => Array.from(document.querySelectorAll(s));
 
-    const app = { base: null, participants: [], standings: null, currentDraw: null, silentDraw: null, reviewing: null, reviewReturn: "silent", _ocrText: null };
+    const app = { base: null, participants: [], standings: null, currentDraw: null, silentDraw: null, blockDraws: [], reviewing: null, reviewReturn: "silent", _ocrText: null };
 
     const STEPS = ["standings", "draw", "silent", "ready"];
     function show(id) {
@@ -169,7 +193,7 @@
       $$(`.seg-btn[data-seg="${seg}"]`).forEach(x => x.classList.toggle("active", x === b));
       $$(`.panel[data-seg="${seg}"]`).forEach(p => p.hidden = (p.dataset.panel !== b.dataset.mode));
     });
-    $$("[data-back]").forEach(b => b.onclick = () => show(b.dataset.back));
+    $$("[data-back]").forEach(b => b.onclick = () => { const t=b.dataset.back; if(t==="silent") enterSilentStep(); else show(t); });
 
     // ---- OCR (lazy, browser only) ----
     let _tess = null, _loading = null;
@@ -203,7 +227,7 @@
         app.participants = teamList(ppl, standings);
         setStatus(st, `✓ ${Object.keys(standings.teams).length} teams · rounds R${standings.roundsShown.join(", R")}`, "ok");
         $("#dr-link").value = link;
-        $("#st-next").disabled = false;
+        revealRoundSetup();
       } catch(e){ setStatus(st, e.message, "err"); }
     };
     wireDrop("st-drop","st-file", async (f) => {
@@ -212,9 +236,16 @@
         if(r.kind!=="standings"){ setStatus(st,"That looks like a draw, not standings.","err"); return; }
         app.standings=r.standings; app.participants=teamList(r.standings);
         setStatus(st, `✓ ${Object.keys(r.standings.teams).length} teams · rounds R${r.standings.roundsShown.join(", R")}`, "ok");
-        $("#st-next").disabled = false;
+        revealRoundSetup();
       } catch(e){ setStatus(st, e.message, "err"); }
     });
+    function revealRoundSetup(){
+      $("#round-setup").hidden = false;
+      if(!$("#rs-first").value) $("#rs-first").value = autoFirstSilent();
+      if(!$("#rs-count").value) $("#rs-count").value = 1;
+      updateRoundSummary();
+      $("#st-next").disabled = false;
+    }
     $("#st-next").onclick = () => enterDrawStep();
 
     // ================= STEP 2: CURRENT DRAW =================
@@ -271,7 +302,9 @@
     }
     $("#review-back").onclick = () => show(app.reviewing==="silent" ? "silent" : "draw");
     $("#review-go").onclick = () => { app._ocrText=null;
-      if(app.reviewReturn==="ready"){ renderReady(); show("ready"); } else show(app.reviewReturn);
+      if(app.reviewReturn==="ready"){ renderReady(); show("ready"); }
+      else if(app.reviewReturn==="silent"){ enterSilentStep(); }
+      else show(app.reviewReturn);
     };
 
     // ================= STEP 3: SILENT =================
@@ -289,11 +322,82 @@
       } catch(e){ setStatus(st, e.message, "err"); }
     });
     $("#silent-skip").onclick = () => { app.silentDraw=null; renderReady(); show("ready"); };
-    $("#silent-go").onclick = () => { app.reviewing="silent"; app.reviewReturn="ready"; renderReview(); show("review"); };
+    $("#silent-go").onclick = () => {
+      if(roundSetup().count > 1){ renderReady(); show("ready"); return; }  // block slots already captured
+      app.reviewing="silent"; app.reviewReturn="ready"; renderReview(); show("review");
+    };
 
     // ================= STEP 4: PREDICT =================
+    function autoFirstSilent(){ const sh=app.standings?app.standings.roundsShown:[]; return sh.length ? Math.max(...sh)+1 : 1; }
+    function roundSetup(){ return { first: parseInt($("#rs-first").value)||autoFirstSilent(), count: Math.max(1, parseInt($("#rs-count").value)||1) }; }
+    function updateRoundSummary(){
+      const { first, count } = roundSetup();
+      const before = (app.standings?app.standings.roundsShown:[]).filter(r=>r<first);
+      const silent = Array.from({length:count},(_,i)=>first+i);
+      const drawRound = first + count;
+      $("#rs-summary").innerHTML =
+        `Points from ${before.length?("rounds "+before.join(", ")):"no earlier rounds"} · ` +
+        `inferring ${silent.length>1?"rounds":"round"} <b>${silent.join(", ")}</b> (silent) · ` +
+        `current draw = post-round-${first+count-1} groupings.` +
+        (count>1 ? `<br>Multiple silent rounds: give each round's draw below for a <b>per-round</b> split, or leave them blank for just the <b>combined</b> points.` : "");
+      syncPreset();
+      renderBlockSlots();
+    }
+    // Intermediate silent-round draw slots (k-1 of them; the current draw covers
+    // the last silent round). Rendered into the silent step; shown by enterSilentStep.
+    let _slotSig = "";
+    function renderBlockSlots(){
+      const { first, count } = roundSetup();
+      const el = $("#rs-draws"); if(!el) return;
+      const sig = first + "/" + count;
+      if(sig === _slotSig) return;   // don't wipe uploaded files unless first/count changed
+      _slotSig = sig;
+      app.blockDraws = [];
+      if(count <= 1){ el.innerHTML = ""; return; }
+      const note = $("#block-draws-note");
+      if(note) note.textContent = `Upload each silent round's draw for a per-round split (leave any blank for combined points only). The current draw already covers round ${first+count-1}.`;
+      let html = "";
+      for(let j=1; j<count; j++){   // rounds first+1 .. first+count-1 (checkpoints)
+        html += `<label class="field" style="margin-bottom:8px"><span class="lab">Draw of round ${first+j}</span><input type="file" data-blockslot="${j}" accept=".html,.htm,image/*"></label>`;
+      }
+      el.innerHTML = html;
+      el.querySelectorAll("[data-blockslot]").forEach(inp=>inp.onchange=async()=>{
+        const j=+inp.dataset.blockslot, f=inp.files[0]; if(!f) return;
+        try {
+          if(isImage(f)){ const text=await ocr(f); app.blockDraws[j]={kind:"draw",rooms:roomsToObjects(roomsFromOcr(text,app.participants))}; }
+          else { const r=loadFromHtml(await f.text()); if(r.kind!=="draw"){ setStatus($("#silent-status"),`Round ${first+j} file isn't a draw.`,"err"); return; } app.blockDraws[j]=r.draw; }
+          setStatus($("#silent-status"), `Round ${first+j} draw loaded (${app.blockDraws[j].rooms.length} rooms).`, "ok");
+        } catch(e){ setStatus($("#silent-status"), e.message, "err"); }
+      });
+    }
+    // Show the right silent-step inputs for the chosen number of silent rounds.
+    function enterSilentStep(){
+      show("silent");
+      const single = roundSetup().count <= 1;
+      $("#silent-single").hidden = !single;
+      $("#silent-block").hidden = single;
+      $("#silent-skip").hidden = !single;              // for a block, empty slots already = combined
+      if(single){ $("#silent-go").disabled = !app.silentDraw; }
+      else { renderBlockSlots(); $("#silent-go").disabled = false; }
+    }
+    $$("[data-preset]").forEach(b=>b.onclick=()=>{
+      if(b.dataset.preset==="standard"){ $("#rs-first").value=autoFirstSilent(); $("#rs-count").value=1; }
+      else if(b.dataset.preset==="wudc"){ $("#rs-first").value=7; $("#rs-count").value=3; }
+      // "custom" makes no change — it's just the state when values match no preset
+      updateRoundSummary();
+    });
+    function whichPreset(){ const { first, count } = roundSetup();
+      if(count===1 && first===autoFirstSilent()) return "standard";
+      if(first===7 && count===3) return "wudc";
+      return "custom"; }
+    function syncPreset(){ const p=whichPreset(); $$("[data-preset]").forEach(b=>b.classList.toggle("on", b.dataset.preset===p)); }
+    ["rs-first","rs-count"].forEach(id=>$("#"+id).addEventListener("input", updateRoundSummary));
+
     function renderReady(){
       const s=app.standings, cd=app.currentDraw, sd=app.silentDraw;
+      if(!$("#rs-first").value) $("#rs-first").value = autoFirstSilent();
+      if(!$("#rs-count").value) $("#rs-count").value = 1;
+      updateRoundSummary();
       $("#ready-stats").innerHTML =
         `<div class="stat"><div class="v">${s?Object.keys(s.teams).length:'—'}</div><div class="k">teams</div></div>`+
         `<div class="stat"><div class="v">${cd?cd.rooms.length:'—'}</div><div class="k">current-draw rooms</div></div>`+
@@ -307,37 +411,79 @@
       const st=$("#ready-status");
       try {
         if(!app.standings || !app.currentDraw){ setStatus(st,"Need both standings and a current draw.","err"); return; }
+        const { first, count } = roundSetup();
         const teams=app.standings.teams, shown=app.standings.roundsShown, pre={};
-        for(const id in teams){ let p=0; for(const r of shown){const c=teams[id].perRound[r]; if(c&&c.points!=null)p+=c.points;} pre[id]=p; }
+        // pre-points = sum of rounds shown that fall BEFORE the first silent round
+        for(const id in teams){ let p=0; for(const r of shown){ if(r<first){ const c=teams[id].perRound[r]; if(c&&c.points!=null)p+=c.points; } } pre[id]=p; }
         const rooms=app.currentDraw.rooms.map(r=>r.teams.map(t=>t.id).filter(Boolean));
         if(!rooms.length || rooms.some(r=>r.length!==4)){ setStatus(st,"Need a complete current draw (rooms of 4).","err"); return; }
         if(rooms.flat().some(id=>pre[id]==null)){ setStatus(st,"Some drawn teams aren't in the standings — re-check the draw.","err"); return; }
-        let silentRooms = null;
-        if(app.silentDraw){ silentRooms = app.silentDraw.rooms.map(r=>r.teams.map(t=>t.id).filter(Boolean)).filter(r=>r.length===4);
-          if(!silentRooms.length) silentRooms=null; }
-        const { perTeam } = inferSilentRound({ prevPoints: pre, nextRooms: rooms, silentRooms });
-        renderPredictions(perTeam, pre, teams);
-        setStatus(st, silentRooms ? "Done — cross-checked against the silent-round draw." : "Done — from the current draw alone.", "ok");
+
+        if(count === 1){
+          // ===== single silent round — unchanged path =====
+          let silentRooms = null;
+          if(app.silentDraw){ silentRooms = app.silentDraw.rooms.map(r=>r.teams.map(t=>t.id).filter(Boolean)).filter(r=>r.length===4);
+            if(!silentRooms.length) silentRooms=null; }
+          const { perTeam, maxSwing } = inferSilentRound({ prevPoints: pre, nextRooms: rooms, silentRooms, nSilentRounds: 1 });
+          renderPredictions(perTeam, pre, teams, maxSwing);
+          setStatus(st, silentRooms ? "Done — cross-checked against the silent-round draw." : "Done — from the current draw alone.", "ok");
+          return;
+        }
+
+        // ===== multiple silent rounds =====
+        const silentDraws = Array.from({length:count},(_,i)=> app.blockDraws[i]
+          ? app.blockDraws[i].rooms.map(r=>r.teams.map(t=>t.id).filter(Boolean)).filter(r=>r.length===4)
+          : null);
+        const res = inferSilentBlock({ prevPoints: pre, silentDraws, currentDraw: rooms, nSilentRounds: count });
+        if(res.combined){
+          renderPredictions(res.combined, pre, teams, res.maxSwing);
+          setStatus(st, `Done — combined points across ${count} silent rounds. Add each round's draw above for a per-round split.`, "ok");
+        } else {
+          renderPerRound(res.perRound, pre, teams, first);
+          setStatus(st, `Done — per-round split across rounds ${first}–${first+count-1}.`, "ok");
+        }
       } catch(e){ setStatus(st, e.message, "err"); }
     };
-    function renderPredictions(perTeam, pre, teams){
-      const LBL={3:"1st",2:"2nd",1:"3rd",0:"4th"};
-      const COL={3:"#00bf8a",2:"#17a2b8",1:"#fd681d",0:"#d1185e"}; // 1st/2nd/3rd/4th
-      const CHEV={
-        3:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l5-5 5 5"/><path d="M3 13l5-5 5 5"/></svg>',
-        2:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5l5-5 5 5"/></svg>',
-        1:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5.5l5 5 5-5"/></svg>',
-        0:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l5 5 5-5"/><path d="M3 8l5 5 5-5"/></svg>'
-      };
+
+    // Per-round split display: one column per silent round, top placement(s) each.
+    function renderPerRound(perRound, pre, teams, first){
+      const LBL={3:"1st",2:"2nd",1:"3rd",0:"4th"}, COL={3:"#00bf8a",2:"#17a2b8",1:"#fd681d",0:"#d1185e"};
+      const ids=Object.keys(perRound[0]).sort((a,b)=>(teams[a].name||"").toLowerCase().localeCompare((teams[b].name||"").toLowerCase()));
+      const pillTop=(d)=>{ const mx=Math.max(...d); return [3,2,1,0].filter(r=>d[r]>=mx-0.02).map(r=>`<span class="ppill top" style="color:${COL[r]};background:${COL[r]}1a;border-color:${COL[r]}59">${LBL[r]} ${Math.round(d[r]*100)}%</span>`).join(" "); };
+      $("#ready-detail").innerHTML = ids.map(id=>{
+        const cells = perRound.map((per,i)=>`<div style="min-width:104px"><div style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-bottom:2px">R${first+i}</div>${per[id]?pillTop(per[id]):"—"}</div>`).join("");
+        return `<div class="predrow"><span class="who"><b>${escapeHtml(teams[id].name)}</b> <span>· ${pre[id]} pts</span></span><span class="bars" style="gap:16px">${cells}</span></div>`;
+      }).join("");
+    }
+    function renderPredictions(perTeam, pre, teams, maxSwing){
       const ids=Object.keys(perTeam).sort((a,b)=>(teams[a].name||"").toLowerCase().localeCompare((teams[b].name||"").toLowerCase()));
-      const bar=(d)=>{ const m=d.indexOf(Math.max(...d));
-        return [3,2,1,0].map(r=>{ const pc=Math.round(d[r]*100); if(pc<1)return "";
-          const top=(r===m);
-          const style=top ? `color:${COL[r]};background:${COL[r]}1a;border-color:${COL[r]}59` : `color:${COL[r]}`;
-          return `<span class="ppill ${top?'top':'dim'}" style="${style}">${CHEV[r]}${LBL[r]} ${pc}%</span>`;
-        }).join("");
-      };
-      $("#ready-detail").innerHTML=ids.map(id=>`<div class="predrow"><span class="who"><b>${escapeHtml(teams[id].name)}</b> <span>· ${pre[id]} pts</span></span><span class="bars">${bar(perTeam[id])}</span></div>`).join("");
+      let bar;
+      if(maxSwing===3){
+        // single silent round -> placements, iconic colours, tied results both highlighted
+        const LBL={3:"1st",2:"2nd",1:"3rd",0:"4th"}, COL={3:"#00bf8a",2:"#17a2b8",1:"#fd681d",0:"#d1185e"};
+        const CHEV={
+          3:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l5-5 5 5"/><path d="M3 13l5-5 5 5"/></svg>',
+          2:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5l5-5 5 5"/></svg>',
+          1:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5.5l5 5 5-5"/></svg>',
+          0:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l5 5 5-5"/><path d="M3 8l5 5 5-5"/></svg>'};
+        bar=(d)=>{ const mx=Math.max(...d);
+          return [3,2,1,0].map(r=>{ const pc=Math.round(d[r]*100); if(pc<1)return "";
+            const top=(d[r] >= mx - 0.02);   // tied placements are all highlighted
+            const style=top ? `color:${COL[r]};background:${COL[r]}1a;border-color:${COL[r]}59` : `color:${COL[r]}`;
+            return `<span class="ppill ${top?'top':'dim'}" style="${style}">${CHEV[r]}${LBL[r]} ${pc}%</span>`;
+          }).join("");
+        };
+      } else {
+        // multiple silent rounds -> combined points gained; show the resulting totals
+        bar=(d, preP)=>{ const mx=Math.max(...d);
+          return d.map((p,g)=>{ const pc=Math.round(p*100); if(pc<1)return "";
+            const top=(p>=mx-0.02);
+            const style=top ? `color:var(--gov-deep);background:var(--gov-tint);border-color:#1F6E5A55` : `color:var(--muted)`;
+            return `<span class="ppill ${top?'top':'dim'}" style="${style}">${preP+g} pts ${pc}%</span>`;
+          }).join("");
+        };
+      }
+      $("#ready-detail").innerHTML=ids.map(id=>`<div class="predrow"><span class="who"><b>${escapeHtml(teams[id].name)}</b> <span>· ${pre[id]} pts</span></span><span class="bars">${bar(perTeam[id], pre[id])}</span></div>`).join("");
     }
   </script>
 </body>
