@@ -278,7 +278,9 @@ function level0Read(prevPoints, nextRooms, maxSwing = 3) {
     const byPre = [...ids.keys()].sort((a, b) => p[b] - p[a]);
     const lo = Math.min(...p);
     const configs = [];
-    for (let B = lo - 1; B <= lo + maxSwing; B++) {
+    const hi = Math.max(...p);
+    const up = (maxSwing === 3) ? hi + 1 : lo + maxSwing;   // single round: original tight bound; block: wider
+    for (let B = lo - 1; B <= up; B++) {
       for (let k = 0; k <= 4; k++) {
         const upper = new Set(byPre.slice(0, k));
         let ok = true;
