@@ -254,31 +254,40 @@ export function predictRoomsCalibrated({ prevPoints, rooms, lambda = PULLUP_LAMB
 //   result index: 0 = 4th (0 pts) … 3 = 1st (3 pts)
 // ===========================================================================
 
-export function inferSilentRound({ prevPoints, nextRooms, silentRooms = null }) {
-  const level0 = level0Read(prevPoints, nextRooms);
-  if (!silentRooms || !silentRooms.length) return { perTeam: level0 };
-  return { perTeam: crossCheck(prevPoints, nextRooms, silentRooms, level0) };
+export function inferSilentRound({ prevPoints, nextRooms, silentRooms = null, nSilentRounds = 1 }) {
+  const maxSwing = 3 * nSilentRounds;                 // one round = 0..3; a block = 0..3k
+  const level0 = level0Read(prevPoints, nextRooms, maxSwing);
+  // The permutation cross-check ({3,2,1,0} per room) only applies to a SINGLE
+  // silent round. A multi-round block gives only the combined swing, so we return
+  // the Level-0 reading for it (per-round split needs the in-between draws).
+  if (nSilentRounds === 1 && silentRooms && silentRooms.length) {
+    return { perTeam: crossCheck(prevPoints, nextRooms, silentRooms, level0), maxSwing };
+  }
+  return { perTeam: level0, maxSwing };
 }
 
-// Level 0: read each next-round room on its own (pullup counting).
-function level0Read(prevPoints, nextRooms) {
+// Level 0: read each next-round room on its own (pullup counting). `maxSwing` is
+// the largest total a team could have gained across the silent round(s): 3 for a
+// single silent round (the distribution is then over 4th/3rd/2nd/1st), 3k for a
+// block of k rounds (the distribution is over 0..3k combined points gained).
+function level0Read(prevPoints, nextRooms, maxSwing = 3) {
   const perTeam = {};
   for (const room of nextRooms) {
     const ids = room.map((t) => (typeof t === "string" ? t : t.id));
     const p = ids.map((id) => prevPoints[id]);
     const byPre = [...ids.keys()].sort((a, b) => p[b] - p[a]);
-    const lo = Math.min(...p), hi = Math.max(...p);
+    const lo = Math.min(...p);
     const configs = [];
-    for (let B = lo - 1; B <= hi + 1; B++) {
+    for (let B = lo - 1; B <= lo + maxSwing; B++) {
       for (let k = 0; k <= 4; k++) {
         const upper = new Set(byPre.slice(0, k));
         let ok = true;
-        const res = p.map((pp, i) => { const level = upper.has(i) ? B + 1 : B; const r = level - pp; if (r < 0 || r > 3) ok = false; return r; });
+        const res = p.map((pp, i) => { const level = upper.has(i) ? B + 1 : B; const r = level - pp; if (r < 0 || r > maxSwing) ok = false; return r; });
         if (ok) configs.push(res);
       }
     }
     const Z = configs.length || 1;
-    ids.forEach((id, i) => { const d = [0, 0, 0, 0]; for (const c of configs) d[c[i]] += 1; perTeam[id] = pullFloor(d.map((x) => x / Z)); });
+    ids.forEach((id, i) => { const d = new Array(maxSwing + 1).fill(0); for (const c of configs) d[c[i]] += 1; perTeam[id] = pullFloor(d.map((x) => x / Z)); });
   }
   return perTeam;
 }
@@ -356,4 +365,40 @@ function pullFloor(dist, cap = 0.92) {
   const nb = m > 0 ? m - 1 : m + 1;   // toward one adjacent placement
   dist[nb] += excess;
   return dist;
+}
+
+// ===========================================================================
+// MULTI-ROUND. Simple rule:
+//   • no intermediate silent-round draws  -> combined swing (the normal way).
+//   • intermediate silent-round draws given -> break into per-round single-round
+//     problems and chain them: solve round i the NORMAL way (its own draw as the
+//     anchor, the next round's draw as the post-round grouping), advance points,
+//     repeat. For one silent round this is exactly the single-round solver.
+// silentDraws[i] = the draw OF silent round i (or null). currentDraw = the draw
+// after the whole block.
+// ===========================================================================
+export function inferSilentBlock({ prevPoints, silentDraws, currentDraw, nSilentRounds }) {
+  const k = nSilentRounds || (silentDraws || []).length;
+  const asRooms = (d) => d ? d.map((rm) => rm.map((t) => (typeof t === "string" ? t : t.id))) : null;
+  const silents = (silentDraws || []).map(asRooms);
+  const current = asRooms(currentDraw);
+  const haveIntermediate = silents.some((s) => s && s.length);
+
+  if (!haveIntermediate) {
+    return { combined: inferSilentRound({ prevPoints, nextRooms: current, nSilentRounds: k }).perTeam, maxSwing: 3 * k };
+  }
+
+  const postDist = {}; for (const id in prevPoints) postDist[id] = new Map([[prevPoints[id], 1]]);
+  const expInt = (m) => { let s = 0, z = 0; for (const [v, p] of m) { s += v * p; z += p; } return Math.round(s / (z || 1)); };
+  const convolve = (m, res) => { const o = new Map(); for (const [v, pv] of m) for (let r = 0; r < res.length; r++) { if (res[r] <= 0) continue; o.set(v + r, (o.get(v + r) || 0) + pv * res[r]); } return o; };
+
+  const perRound = [];
+  for (let i = 0; i < k; i++) {
+    const pre = {}; for (const id in postDist) pre[id] = expInt(postDist[id]);
+    const nextRooms = (i < k - 1) ? silents[i + 1] : current;   // draw revealing post-round-i
+    const { perTeam } = inferSilentRound({ prevPoints: pre, nextRooms, silentRooms: silents[i], nSilentRounds: 1 });
+    perRound.push(perTeam);
+    for (const id in perTeam) postDist[id] = convolve(postDist[id], perTeam[id]);
+  }
+  return { perRound };
 }
