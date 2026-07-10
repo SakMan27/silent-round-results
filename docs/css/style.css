@@ -1,4 +1,4 @@
-/* Silent Round — visual system
+/* Silent Round - visual system
    Subject: British Parliamentary debate tabbing. Palette is the debating chamber:
    government green as the primary, opposition crimson used sparingly, brass for
    placements/scores. Editorial serif display (Fraunces) over a clean UI sans
@@ -214,7 +214,7 @@ label.field .lab {
   display: block; font-size: 12.5px; font-weight: 600;
   color: var(--ink); margin-bottom: 6px;
 }
-input[type=text], input[type=url], select {
+input[type=text], input[type=url], input[type=number], select {
   width: 100%;
   padding: 11px 13px;
   border: 1px solid var(--line);
@@ -259,19 +259,22 @@ button.btn:focus-visible { outline: 2.5px solid var(--gov); outline-offset: 2px;
 
 /* ---------- dropzone ---------- */
 .drop {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 140px; gap: 2px;
   border: 1.5px dashed #CFCBBC;
   border-radius: var(--radius);
   background: var(--surface-2);
-  padding: 26px 20px;
+  padding: 22px 20px;
   text-align: center;
   cursor: pointer;
   transition: border-color .15s, background .15s;
 }
 .drop:hover, .drop.over { border-color: var(--gov); background: var(--gov-tint); }
-.drop .ic { width: 26px; height: 26px; color: var(--gov); margin-bottom: 8px; }
+.drop .ic { flex: 0 0 auto; width: 28px; height: 28px; color: var(--gov); margin-bottom: 8px; }
 .drop b { display:block; font-size: 14px; }
 .drop small { color: var(--muted); font-size: 12.5px; }
 .drop.filled { border-style: solid; border-color: var(--gov); background: var(--gov-tint); }
+.drop.filled .ic { color: var(--gov); }
 .drop input[type=file] { display: none; }
 
 .subdrop { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
@@ -352,7 +355,7 @@ button.btn:focus-visible { outline: 2.5px solid var(--gov); outline-offset: 2px;
   font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:999px;
   border:1px solid transparent; white-space:nowrap; transition:opacity .15s; }
 .ppill svg { width:11px; height:11px; }
-.ppill.top { }              /* solid — styled inline with its colour */
+.ppill.top { }              /* solid - styled inline with its colour */
 .ppill.dim { opacity:.4; }  /* faded alternatives */
 
 .predrow { display:flex; align-items:center; gap:12px; padding:9px 2px; border-top:1px solid var(--line-soft); }
@@ -361,8 +364,32 @@ button.btn:focus-visible { outline: 2.5px solid var(--gov); outline-offset: 2px;
 .predrow .who span { color:var(--muted); font-size:12px; }
 .predrow .bars { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
 
-/* ---------- dropzone shape fix: proper centered card ---------- */
-.drop { display:flex; flex-direction:column; align-items:center; justify-content:center;
-  min-height:150px; padding:24px 20px; gap:2px; }
-.drop .ic { flex:0 0 auto; width:28px; height:28px; margin-bottom:10px; }
-.drop.filled .ic { color: var(--gov); }
+
+/* active/selected preset button */
+.btn.ghost.on { background: var(--gov-tint); border-color: var(--gov); color: var(--gov-deep); }
+
+/* disabled round-setup inputs (when a preset is active) */
+input:disabled { background: var(--line-soft); color: var(--muted-2); cursor: not-allowed; border-color: var(--line-soft); box-shadow: none; }
+label.field:has(input:disabled) .lab { color: var(--muted-2); }
+
+/* multi-round draw slots: stack as their own labelled drops */
+.slot { margin-top: 12px; }
+.slot .slab { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink); margin-bottom: 6px; }
+
+/* ---------- multi-round draw slots ---------- */
+.slot { margin-bottom: 16px; }
+.slot:last-child { margin-bottom: 0; }
+.slab { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink); margin-bottom: 7px; }
+.slot .drop { min-height: 92px; padding: 16px 18px; }
+.slot .drop .ic { width: 22px; height: 22px; margin-bottom: 6px; }
+.slot .drop b { font-size: 13px; }
+
+/* ---------- round-setup number inputs ---------- */
+#rs-first, #rs-count {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  font-size: 16px;
+  text-align: center;
+  letter-spacing: .02em;
+}
+#rs-first:disabled, #rs-count:disabled { font-weight: 600; }
