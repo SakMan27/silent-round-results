@@ -384,9 +384,16 @@ export function inferSilentBlock({ prevPoints, silentDraws, currentDraw, nSilent
   const asRooms = (d) => d ? d.map((rm) => rm.map((t) => (typeof t === "string" ? t : t.id))) : null;
   const silents = (silentDraws || []).map(asRooms);
   const current = asRooms(currentDraw);
-  const haveIntermediate = silents.some((s) => s && s.length);
 
-  if (!haveIntermediate) {
+  // Per-round split needs each round's CHECKPOINT (the next round's draw, which
+  // reveals its post-round groupings). Round i's checkpoint is silents[i+1];
+  // the last round's checkpoint is the current draw (always present). So we need
+  // silents[1..k-1]. Each round's OWN draw silents[i] is an optional ANCHOR that
+  // sharpens that round via the cross-check — used when given, never required.
+  let haveCheckpoints = true;
+  for (let i = 1; i < k; i++) if (!(silents[i] && silents[i].length)) haveCheckpoints = false;
+
+  if (!haveCheckpoints) {
     return { combined: inferSilentRound({ prevPoints, nextRooms: current, nSilentRounds: k }).perTeam, maxSwing: 3 * k };
   }
 
@@ -397,7 +404,7 @@ export function inferSilentBlock({ prevPoints, silentDraws, currentDraw, nSilent
   const perRound = [];
   for (let i = 0; i < k; i++) {
     const pre = {}; for (const id in postDist) pre[id] = expInt(postDist[id]);
-    const nextRooms = (i < k - 1) ? silents[i + 1] : current;   // draw revealing post-round-i
+    const nextRooms = (i < k - 1) ? silents[i + 1] : current;   // checkpoint: draw revealing post-round-i
     const { perTeam } = inferSilentRound({ prevPoints: pre, nextRooms, silentRooms: silents[i], nSilentRounds: 1 });
     perRound.push(perTeam);
     for (const id in perTeam) postDist[id] = convolve(postDist[id], perTeam[id]);
